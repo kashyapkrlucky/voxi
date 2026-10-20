@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Voxi
 
-## Getting Started
+Personal voice assistant for tasks and reminders. Design and roadmap: [plan.md](plan.md).
 
-First, run the development server:
+## Local setup
+
+Needs Node 22+ and a Neon project (create a `dev` branch for local work).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env        # fill in Neon URLs and the other keys
+npm install                 # also runs prisma generate
+npm run db:migrate          # applies prisma/migrations to the Neon branch in DIRECT_URL
+npm run dev                 # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`npm test` creates and deletes throwaway users in whatever database `DATABASE_URL` points at, so point it at the Neon `dev` branch, not production.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Script | What it does |
+|---|---|
+| `npm run dev` | Next.js dev server |
+| `npm test` | Vitest (repo tests hit the database in `DATABASE_URL`) |
+| `npm run typecheck` | Generates route types, then `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm run db:migrate` | Create/apply a migration in dev (`prisma migrate dev`) |
+| `npm run db:deploy` | Apply migrations in prod (`prisma migrate deploy`) |
 
-## Learn More
+## Layout
 
-To learn more about Next.js, take a look at the following resources:
+```
+prisma/schema.prisma      data model (users, tasks, reminders, action_log)
+src/lib/db.ts             Prisma client; Neon adapter for *.neon.tech, pg adapter otherwise
+src/lib/owner.ts          single-owner "auth" until Google sign-in lands
+src/lib/tasks/            zod schemas + repository (create/update/delete/complete/find)
+src/lib/reminders/        zod schemas + repository (create/list/update/cancel/snooze)
+src/app/api/              REST route handlers
+src/app/task-board.tsx    task UI
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## API
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Method | Path | Body / query |
+|---|---|---|
+| GET | `/api/tasks` | `query, status, project, tag, dueBefore, dueAfter, overdue, includeDone, limit` |
+| POST | `/api/tasks` | `{ title, notes?, priority?, dueAt?, estimateMin?, project?, tags?, recurrenceRule? }` |
+| GET / PATCH / DELETE | `/api/tasks/:id` | PATCH takes any task field plus `status` |
+| POST | `/api/tasks/:id/complete` | recurring tasks spawn the next instance |
+| GET | `/api/reminders` | `from, to, status, limit` |
+| POST | `/api/reminders` | `{ message, fireAt, recurrenceRule?, taskId?, channels? }` |
+| PATCH / DELETE | `/api/reminders/:id` | DELETE cancels |
+| POST | `/api/reminders/:id/snooze` | `{ minutes }` (default 10) |
 
-## Deploy on Vercel
+## Deploying (Vercel + Neon)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Set `DATABASE_URL` (Neon pooled URL), `DIRECT_URL` (Neon direct URL), `OWNER_EMAIL` and `OWNER_TIMEZONE` in Vercel, then run `npm run db:deploy` against Neon once.
+There is **no auth yet**, so anyone with the URL can use a deployed instance. Keep it local, or behind Vercel Deployment Protection, until Google sign-in is added.

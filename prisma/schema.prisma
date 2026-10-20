@@ -1,0 +1,114 @@
+// Voxi data model. See plan.md §5.
+// Every row is scoped by userId so multi-user later needs no schema change.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  done
+  cancelled
+}
+
+enum Priority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum ReminderStatus {
+  scheduled
+  fired
+  snoozed
+  cancelled
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  name      String?
+  timezone  String   @default("UTC")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tasks     Task[]
+  reminders Reminder[]
+  actions   ActionLog[]
+
+  @@map("users")
+}
+
+model Task {
+  id             String     @id @default(cuid())
+  userId         String     @map("user_id")
+  title          String
+  notes          String?
+  status         TaskStatus @default(todo)
+  priority       Priority   @default(medium)
+  dueAt          DateTime?  @map("due_at")
+  scheduledFor   DateTime?  @map("scheduled_for")
+  estimateMin    Int?       @map("estimate_min")
+  project        String?
+  tags           String[]   @default([])
+  recurrenceRule String?    @map("recurrence_rule")
+  parentId       String?    @map("parent_id")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  completedAt    DateTime?  @map("completed_at")
+  deletedAt      DateTime?  @map("deleted_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Task?      @relation("Subtasks", fields: [parentId], references: [id], onDelete: SetNull)
+  subtasks  Task[]     @relation("Subtasks")
+  reminders Reminder[]
+
+  @@index([userId, status])
+  @@index([userId, dueAt])
+  @@map("tasks")
+}
+
+model Reminder {
+  id             String         @id @default(cuid())
+  userId         String         @map("user_id")
+  taskId         String?        @map("task_id")
+  message        String
+  fireAt         DateTime       @map("fire_at")
+  recurrenceRule String?        @map("recurrence_rule")
+  status         ReminderStatus @default(scheduled)
+  channels       String[]       @default(["push"])
+  lastFiredAt    DateTime?      @map("last_fired_at")
+  triggerRunId   String?        @map("trigger_run_id")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status, fireAt])
+  @@map("reminders")
+}
+
+// Every state change goes through here; powers undo and audit.
+model ActionLog {
+  id     String   @id @default(cuid())
+  userId String   @map("user_id")
+  ts     DateTime @default(now())
+  tool   String
+  args   Json
+  before Json?
+  after  Json?
+  undone Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, ts])
+  @@map("action_log")
+}
