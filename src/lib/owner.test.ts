@@ -25,12 +25,12 @@ afterAll(async () => {
 });
 
 describe("auth allow-list", () => {
-  it("uses AUTH_ALLOWED_EMAILS, falling back to OWNER_EMAIL, case-insensitively", () => {
+  it("is open to anyone by default, and AUTH_ALLOWED_EMAILS restricts it (case-insensitively)", () => {
+    vi.stubEnv("AUTH_ALLOWED_EMAILS", "");
+    vi.stubEnv("OWNER_EMAIL", "owner@example.com");
+    expect(allowedEmails()).toEqual([]); // empty = anyone; OWNER_EMAIL no longer restricts sign-in
     vi.stubEnv("AUTH_ALLOWED_EMAILS", " Me@Example.com , other@example.com ");
     expect(allowedEmails()).toEqual(["me@example.com", "other@example.com"]);
-    vi.stubEnv("AUTH_ALLOWED_EMAILS", "");
-    vi.stubEnv("OWNER_EMAIL", "Owner@Example.com");
-    expect(allowedEmails()).toEqual(["owner@example.com"]);
   });
 
   it("only honours the dev bypass outside production", () => {

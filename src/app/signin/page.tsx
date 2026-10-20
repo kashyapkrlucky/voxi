@@ -3,7 +3,7 @@ import { auth, signIn } from "@/auth";
 import { OrbMark } from "@/app/voice-orb";
 
 const errors: Record<string, string> = {
-  AccessDenied: "That Google account isn't allowed to use this Voxi.",
+  AccessDenied: "That Google account can't sign in here. Try a different one.",
   Configuration: "Sign-in isn't configured correctly on the server.",
 };
 
@@ -63,7 +63,7 @@ export default async function SignInPage({ searchParams }: PageProps<"/signin">)
             Continue with Google
           </button>
         </form>
-        <p className="mt-6 text-xs text-faint">Private to you. Only allowed Google accounts can sign in.</p>
+        <p className="mt-6 text-xs text-faint">Free to join with any Google account. Your tasks stay private to you.</p>
       </div>
     </main>
   );

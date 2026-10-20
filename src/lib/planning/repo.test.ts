@@ -58,3 +58,20 @@ describe("plans", () => {
     expect(result.blocks.reduce((m, b) => m + (b.end.getTime() - b.start.getTime()) / 60_000, 0)).toBeLessThanOrEqual(60);
   });
 });
+
+describe("isolation between users", () => {
+  it("one user can't accept, read or undo another user's plan, or open their chat", async () => {
+    const { userId: other, cleanup: done } = await createTestUser();
+    await createTask(userId, { title: "Private task", estimateMin: 15 });
+    const { plan } = await proposePlan(userId, {}, NOW);
+
+    await expect(acceptPlan(other, plan.id)).rejects.toThrow(/not found/);
+    expect(await getPlanForDay(other, plan.date)).toBeNull();
+    expect(await undoLast(other)).toEqual([]);
+
+    const { getChat, getCurrentChat } = await import("@/lib/chat");
+    const mine = await getCurrentChat(userId);
+    await expect(getChat(other, mine.id)).rejects.toThrow(/not found/);
+    await done();
+  });
+});

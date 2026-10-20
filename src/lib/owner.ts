@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { auth, devBypassEnabled } from "@/auth";
 import { prisma } from "@/lib/db";
 import { UnauthorizedError } from "@/lib/errors";
@@ -8,15 +9,34 @@ export type CurrentUser = { id: string; timezone: string };
 
 const idsByEmail = new Map<string, string>();
 
+function isTimezone(tz: string | null | undefined): tz is string {
+  if (!tz) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// A new account starts in the visitor's timezone (Vercel adds it per request); they can change it in settings.
+async function initialTimezone(): Promise<string> {
+  try {
+    const fromRequest = (await headers()).get("x-vercel-ip-timezone");
+    if (isTimezone(fromRequest)) return fromRequest;
+  } catch {
+    // Not in a request (tests, scripts).
+  }
+  return isTimezone(process.env.OWNER_TIMEZONE) ? process.env.OWNER_TIMEZONE : "UTC";
+}
+
 async function userIdFor(email: string): Promise<string> {
   const cached = idsByEmail.get(email);
   if (cached) return cached;
-  // OWNER_TIMEZONE only seeds a new account; after that the settings page owns it.
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: {},
-    create: { email, timezone: process.env.OWNER_TIMEZONE ?? "UTC" },
-  });
+  // The timezone only seeds a new account; after that the settings page owns it.
+  const user =
+    (await prisma.user.findUnique({ where: { email } })) ??
+    (await prisma.user.upsert({ where: { email }, update: {}, create: { email, timezone: await initialTimezone() } }));
   idsByEmail.set(email, user.id);
   return user.id;
 }

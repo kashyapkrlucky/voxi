@@ -135,17 +135,23 @@ evals/                    agent evals
 
 ## Sign-in
 
-Google sign-in via Auth.js (`src/auth.ts`), limited to `AUTH_ALLOWED_EMAILS` (default: `OWNER_EMAIL`). Sessions are
-signed JWT cookies (30 days); the first sign-in creates your user row, keyed by email. `src/proxy.ts` sends signed-out
-page visits to `/signin` and answers signed-out API calls with 401. Sign out from the settings page.
+Google sign-in via Auth.js (`src/auth.ts`). **Anyone with a verified Google account can join**, and each account
+gets its own private Voxi: every query is scoped to the signed-in user (`src/lib/owner.ts` maps the session email to
+a user row, created on first sign-in with the visitor's timezone from Vercel's `x-vercel-ip-timezone` header).
+Set `AUTH_ALLOWED_EMAILS` to restrict sign-in to a list. Sessions are signed JWT cookies (30 days). `src/proxy.ts`
+sends signed-out page visits to `/signin` and answers signed-out API calls with 401.
+
+Because it's open, every user's chat, speech and transcription runs on your OpenAI key: set a monthly usage limit
+in the OpenAI dashboard. In Google Cloud, publish the OAuth consent screen (in "Testing" only listed test users can
+sign in).
 
 For automated local testing without Google, `AUTH_DEV_BYPASS=true` acts as `OWNER_EMAIL`; it's ignored in production.
 
 ## Deploying (Vercel + Neon + Trigger.dev)
 
 1. **Google Cloud → Credentials → your OAuth client:** add `https://YOUR-DOMAIN/api/auth/callback/google` as an
-   authorized redirect URI (keep the localhost one for dev). If the consent screen is in "Testing", add your Google
-   account as a test user.
+   authorized redirect URI (keep the localhost one for dev). For open sign-up, set the OAuth consent screen to
+   **In production** (Publish app); in "Testing" only listed test users can sign in.
 2. **Neon:** apply migrations to the production branch once: `npm run db:deploy` with `DIRECT_URL` pointing at it.
 3. **Vercel → Project → Settings → Environment Variables (Production):**
    `DATABASE_URL` (pooled), `DIRECT_URL`, `OPENAI_API_KEY` (+ optional `OPENAI_*` model vars), `AUTH_SECRET`,

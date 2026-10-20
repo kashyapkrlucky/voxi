@@ -1,12 +1,13 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
-// Google sign-in, limited to an allow-list (just the owner for now). Sessions are JWT cookies, so this file
-// touches no database and can run in proxy.ts; lib/owner.ts maps the signed-in email to our user row.
+// Google sign-in, open to any verified Google account (each gets its own private Voxi). Setting
+// AUTH_ALLOWED_EMAILS restricts it to that list. Sessions are JWT cookies, so this file touches no database
+// and can run in proxy.ts; lib/owner.ts maps the signed-in email to our user row.
 
+// Empty means anyone may sign in.
 export function allowedEmails(): string[] {
-  // `||`, not `??`: an empty AUTH_ALLOWED_EMAILS must still fall back to the owner, or nobody can sign in.
-  const list = process.env.AUTH_ALLOWED_EMAILS || process.env.OWNER_EMAIL || "";
+  const list = process.env.AUTH_ALLOWED_EMAILS ?? "";
   return list
     .split(",")
     .map((e) => e.trim().toLowerCase())
@@ -25,7 +26,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     signIn({ profile }) {
       const email = profile?.email?.toLowerCase();
-      return Boolean(email && profile?.email_verified && allowedEmails().includes(email));
+      if (!email || !profile?.email_verified) return false;
+      const allowed = allowedEmails();
+      return allowed.length === 0 || allowed.includes(email);
     },
   },
 });
