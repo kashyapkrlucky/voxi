@@ -17,24 +17,13 @@ npm run dev                 # http://localhost:3000
 
 ## Voice
 
-Hold the mic button (or Space) to talk, release to send; Esc cancels. Talking while Voxi speaks interrupts it.
-Replies are spoken only for turns started by voice. The bar under the chat picks the engines (saved per device):
-
-- **Hearing:** Browser (Web Speech API, free; Chrome sends audio to Google) or OpenAI (`OPENAI_TRANSCRIBE_MODEL`).
-- **Voice:** Browser speech synthesis, OpenAI (`OPENAI_TTS_MODEL`, `OPENAI_TTS_VOICE`), or off.
+Hold the orb (or Space) to talk and release to send, or tap to start and tap again to send; Esc cancels. Talking
+while Voxi speaks interrupts it. Speech is always OpenAI: the recording goes to `/api/transcribe`
+(`OPENAI_TRANSCRIBE_MODEL`) and replies to voice turns are spoken via `/api/speech` (`OPENAI_TTS_MODEL`) in a female
+voice: `nova` by default, or `shimmer` / `coral` via `OPENAI_TTS_VOICE`. Typed turns get text only.
+On iOS the tap that starts listening also unlocks audio, so the spoken reply can play when it arrives.
 
 The mic needs HTTPS or localhost.
-
-## Planning
-
-"Plan my day", "plan my week", "I have an hour free tonight", "what should I do next?". The planner is plain code:
-it scores open tasks (overdue/due soon, priority, age, a small nudge for quick wins) and fits them into working hours
-(09:00–18:00 by default, `users.work_start_min` / `work_end_min`) or the free window you name, using each task's
-estimate (30 min if unset). Voxi reads the draft back, applies edits ("skip the gym", "report first") by re-planning,
-and only locks it in when you agree. Locking in sets each task's `scheduledFor`; it's one undoable step.
-
-"Morning briefing at 7:30" / "evening review at 9pm" set daily briefing reminders. The morning one drafts today's
-plan and summarises it; the evening one says what you finished and what's still open.
 
 ## Settings and your data
 
@@ -128,7 +117,6 @@ evals/                    agent evals
 | POST | `/api/speech` | `{ text }` → mp3 audio |
 | POST | `/api/reminders/:id/done` | notification "Done": completes the linked task |
 | POST / DELETE | `/api/push/subscribe` | browser `PushSubscription` JSON / `{ endpoint }` |
-| POST | `/api/push/test` | sends a test notification |
 | GET | `/api/plans?day=` | today's plan (accepted, else latest draft) |
 | POST | `/api/plans` | `{ day?, days? }` drafts a plan |
 | POST | `/api/plans/:id/accept` | `{ remindAtBlockStart? }` locks it in |

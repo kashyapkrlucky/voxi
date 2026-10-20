@@ -13,7 +13,6 @@ import {
   PlusCircle,
   RotateCcw,
   Settings,
-  SlidersHorizontal,
   Square,
   SquarePen,
   Sun,
@@ -24,14 +23,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVoice } from "@/app/use-voice";
 import { OrbMark, VoiceOrb, type OrbState } from "@/app/voice-orb";
-import {
-  browserSttSupported,
-  setVoiceSettings,
-  useIsClient,
-  useVoiceSettings,
-  type SttEngine,
-  type TtsEngine,
-} from "@/app/voice-settings";
+import { useIsClient } from "@/app/use-is-client";
 
 const suggestions: { text: string; icon: LucideIcon }[] = [
   { text: "Plan my day", icon: Sun },
@@ -159,7 +151,7 @@ export function Assistant({ onChange, onOpenTasks }: { onChange: () => void; onO
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-  }, [messages, voice.interim, status]);
+  }, [messages, voice.state, status]);
 
   function send(text: string) {
     if (!text.trim() || busy) return;
@@ -265,7 +257,7 @@ export function Assistant({ onChange, onOpenTasks }: { onChange: () => void; onO
             <Hero
               orb={<VoiceOrb {...orbProps} size="lg" />}
               capturing={capturing}
-              interim={voice.interim}
+              transcribing={voice.state === "transcribing"}
               onPick={send}
             />
           ) : (
@@ -296,11 +288,7 @@ export function Assistant({ onChange, onOpenTasks }: { onChange: () => void; onO
       {!empty && capturing && (
         <div className="animate-fade pointer-events-none px-6 pb-2 text-center">
           <p className="mx-auto max-w-2xl text-balance text-xl font-medium leading-snug tracking-tight sm:text-2xl">
-            {voice.interim ? (
-              <span className="text-fg">{voice.interim}</span>
-            ) : (
-              <span className="text-faint">{listening ? "Listening…" : "Transcribing…"}</span>
-            )}
+            <span className="text-faint">{listening ? "Listening…" : "Transcribing…"}</span>
           </p>
         </div>
       )}
@@ -349,12 +337,9 @@ export function Assistant({ onChange, onOpenTasks }: { onChange: () => void; onO
             </form>
             {!empty && <VoiceOrb {...orbProps} />}
           </div>
-          <div className="mt-1.5 flex items-center justify-between px-2 text-[11px] text-faint">
-            <VoiceMenu />
-            <span className="hidden sm:inline">
-              Hold <Kbd>Space</Kbd> to talk · <Kbd>Esc</Kbd> to cancel
-            </span>
-          </div>
+          <p className="mt-1.5 hidden px-2 text-right text-[11px] text-faint sm:block">
+            Hold <Kbd>Space</Kbd> to talk · <Kbd>Esc</Kbd> to cancel
+          </p>
         </div>
       </div>
     </div>
@@ -370,12 +355,12 @@ function Greeting() {
 function Hero({
   orb,
   capturing,
-  interim,
+  transcribing,
   onPick,
 }: {
   orb: React.ReactNode;
   capturing: boolean;
-  interim: string;
+  transcribing: boolean;
   onPick: (text: string) => void;
 }) {
   return (
@@ -389,11 +374,7 @@ function Hero({
       <div className="py-6">{orb}</div>
       <p className="min-h-8 max-w-xl text-balance text-xl font-medium tracking-tight">
         {capturing ? (
-          interim ? (
-            <span>{interim}</span>
-          ) : (
-            <span className="text-faint">Listening…</span>
-          )
+          <span className="text-faint">{transcribing ? "Transcribing…" : "Listening…"}</span>
         ) : (
           <span className="text-base font-normal text-muted">Tap or hold the orb and just say it.</span>
         )}
@@ -507,49 +488,5 @@ function DockAction({ label, onClick, children }: { label: string; onClick: () =
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
     <kbd className="rounded border border-line bg-panel-2 px-1 py-px font-mono text-[10px] text-muted">{children}</kbd>
-  );
-}
-
-// Per-device speech engines, tucked into a small popover.
-function VoiceMenu() {
-  const settings = useVoiceSettings();
-  const isClient = useIsClient();
-  const browserStt = isClient && browserSttSupported();
-  const select =
-    "w-full rounded-lg border border-line bg-panel-solid px-2 py-1.5 text-xs text-fg outline-none focus:border-line-strong";
-
-  return (
-    <details className="group relative">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-full px-2 py-1 transition hover:bg-panel-3 hover:text-muted [&::-webkit-details-marker]:hidden">
-        <SlidersHorizontal className="size-3.5" />
-        Voice
-      </summary>
-      <div className="glass shadow-soft absolute bottom-full left-0 z-20 mb-2 w-64 space-y-3 rounded-2xl border border-line p-3 text-xs text-muted">
-        <label className="block space-y-1">
-          <span className="font-medium text-fg">Hearing you</span>
-          <select
-            value={settings.stt}
-            onChange={(e) => setVoiceSettings({ stt: e.target.value as SttEngine })}
-            className={select}
-          >
-            {browserStt && <option value="browser">Browser · free, instant</option>}
-            <option value="openai">OpenAI · most accurate</option>
-          </select>
-        </label>
-        <label className="block space-y-1">
-          <span className="font-medium text-fg">Voxi&apos;s voice</span>
-          <select
-            value={settings.tts}
-            onChange={(e) => setVoiceSettings({ tts: e.target.value as TtsEngine })}
-            className={select}
-          >
-            <option value="browser">Browser · free</option>
-            <option value="openai">OpenAI · natural</option>
-            <option value="off">Off · text only</option>
-          </select>
-        </label>
-        <p className="text-faint">Saved on this device. Replies are spoken only when you talk.</p>
-      </div>
-    </details>
   );
 }

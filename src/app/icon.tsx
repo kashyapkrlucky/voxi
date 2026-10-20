@@ -1,28 +1,9 @@
-import { ImageResponse } from "next/og";
+import { orbIcon } from "@/app/orb-icon";
 
 export const size = { width: 512, height: 512 };
 export const contentType = "image/png";
 
+// Favicon and the manifest's general icon: the orb on transparent.
 export default function Icon() {
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#18181b",
-          color: "#fafafa",
-          fontSize: 300,
-          fontWeight: 700,
-          borderRadius: 96,
-        }}
-      >
-        V
-      </div>
-    ),
-    size,
-  );
+  return orbIcon({ size: 512, scale: 0.9 });
 }

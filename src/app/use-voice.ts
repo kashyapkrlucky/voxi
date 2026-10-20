@@ -1,31 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useVoiceSettings } from "@/app/voice-settings";
 
-// Minimal Web Speech API types (not in TypeScript's DOM lib).
-type RecognitionResultList = ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }>;
-interface Recognition {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((e: { results: RecognitionResultList }) => void) | null;
-  onerror: ((e: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
-}
-type RecognitionCtor = new () => Recognition;
+// Voice I/O, OpenAI only: the mic is recorded and sent to /api/transcribe; replies are spoken via /api/speech.
 
 export type VoiceState = "idle" | "listening" | "transcribing" | "speaking";
 
 const MIN_RECORDING_MS = 300;
-
-function recognitionCtor(): RecognitionCtor | undefined {
-  const w = window as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition;
-}
+// Smallest valid WAV (no samples). Played once during a tap to unlock audio on iOS.
+const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
 
 // Live microphone loudness (0–1) for the orb. Writes into a callback every animation frame.
 function createMeter(stream: MediaStream, onLevel: (v: number) => void): () => void {
@@ -58,25 +41,43 @@ function createMeter(stream: MediaStream, onLevel: (v: number) => void): () => v
   };
 }
 
+// Plays `url` on a (reused) element and calls `onEnd` once when it finishes.
+function playOn(el: HTMLAudioElement, url: string, onEnd: () => void): Promise<void> {
+  el.addEventListener("ended", onEnd, { once: true });
+  el.src = url;
+  return el.play();
+}
+
+// Starts a muted, silent clip so iOS treats this element as user-activated for later playback.
+function unlockElement(): HTMLAudioElement {
+  const el = new Audio();
+  el.setAttribute("playsinline", "");
+  el.muted = true;
+  el.src = SILENT_WAV;
+  el.play()
+    .catch(() => {})
+    .finally(() => {
+      el.pause();
+      el.muted = false;
+    });
+  return el;
+}
+
 function errorMessage(err: unknown): string {
-  const name = err instanceof DOMException ? err.name : typeof err === "string" ? err : "";
-  if (name === "NotAllowedError" || name === "not-allowed" || name === "service-not-allowed") {
-    return "Microphone access is blocked. Allow it in your browser's site settings.";
-  }
-  if (name === "NotFoundError" || name === "audio-capture") return "No microphone found.";
-  if (name === "network") return "Speech recognition needs a network connection.";
+  const name = err instanceof DOMException ? err.name : "";
+  if (name === "NotAllowedError") return "Microphone access is blocked. Allow it in your browser's site settings.";
+  if (name === "NotFoundError") return "No microphone found.";
   return err instanceof Error ? err.message : "Voice input failed.";
 }
 
 export function useVoice({ onTranscript }: { onTranscript: (text: string) => void }) {
-  const settings = useVoiceSettings();
   const [state, setState] = useState<VoiceState>("idle");
-  const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const recognition = useRef<Recognition | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
-  const audio = useRef<HTMLAudioElement | null>(null);
+  // One reusable player: iOS only lets audio play later if this element was started during a tap.
+  const player = useRef<HTMLAudioElement | null>(null);
+  const playerUrl = useRef<string | null>(null);
   const speechAbort = useRef<AbortController | null>(null);
   const startedAt = useRef(0);
   // Mic loudness for visuals; read it in an animation loop, not during render.
@@ -88,6 +89,11 @@ export function useVoice({ onTranscript }: { onTranscript: (text: string) => voi
   useEffect(() => {
     onTranscriptRef.current = onTranscript;
   }, [onTranscript]);
+
+  // Must run synchronously inside the tap/keypress that starts listening.
+  const unlockAudio = useCallback(() => {
+    if (!player.current) player.current = unlockElement();
+  }, []);
 
   const meter = useCallback((stream: MediaStream) => {
     stopMeter.current?.();
@@ -102,7 +108,6 @@ export function useVoice({ onTranscript }: { onTranscript: (text: string) => voi
 
   const deliver = useCallback((text: string) => {
     stopMeter.current?.();
-    setInterim("");
     setState("idle");
     if (!cancelled.current && text.trim()) onTranscriptRef.current(text.trim());
   }, []);
@@ -110,57 +115,21 @@ export function useVoice({ onTranscript }: { onTranscript: (text: string) => voi
   const stopSpeaking = useCallback(() => {
     speechAbort.current?.abort();
     speechAbort.current = null;
-    if (audio.current) {
-      audio.current.pause();
-      audio.current.src = "";
-      audio.current = null;
+    if (player.current && !player.current.paused) player.current.pause();
+    if (playerUrl.current) {
+      URL.revokeObjectURL(playerUrl.current);
+      playerUrl.current = null;
     }
-    if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
     setState((s) => (s === "speaking" ? "idle" : s));
   }, []);
 
   const start = useCallback(async () => {
-    if (recognition.current || recorder.current) return;
+    if (recorder.current) return;
+    unlockAudio();
     stopSpeaking(); // barge-in: talking over Voxi stops it
     setError(null);
-    setInterim("");
     cancelled.current = false;
     startedAt.current = Date.now();
-
-    const Ctor = settings.stt === "browser" ? recognitionCtor() : undefined;
-    if (Ctor) {
-      const rec = new Ctor();
-      rec.lang = navigator.language || "en-US";
-      rec.continuous = true;
-      rec.interimResults = true;
-      let text = "";
-      rec.onresult = (e) => {
-        text = Array.from(e.results, (r) => r[0].transcript).join("");
-        setInterim(text);
-      };
-      rec.onerror = (e) => {
-        if (e.error !== "aborted" && e.error !== "no-speech") setError(errorMessage(e.error));
-      };
-      // The Web Speech API doesn't expose audio, so open the mic separately just to drive the visuals.
-      let meterStream: MediaStream | null = null;
-      rec.onend = () => {
-        recognition.current = null;
-        meterStream?.getTracks().forEach((t) => t.stop());
-        deliver(text);
-      };
-      recognition.current = rec;
-      setState("listening");
-      rec.start();
-      navigator.mediaDevices
-        ?.getUserMedia({ audio: true })
-        .then((stream) => {
-          if (!recognition.current) return stream.getTracks().forEach((t) => t.stop());
-          meterStream = stream;
-          meter(stream);
-        })
-        .catch(() => {});
-      return;
-    }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -194,35 +163,23 @@ export function useVoice({ onTranscript }: { onTranscript: (text: string) => voi
       setError(errorMessage(err));
       setState("idle");
     }
-  }, [settings.stt, stopSpeaking, deliver, meter]);
+  }, [unlockAudio, stopSpeaking, deliver, meter]);
 
   // Finish listening and send what was heard.
   const stop = useCallback(() => {
-    recognition.current?.stop();
     if (recorder.current?.state === "recording") recorder.current.stop();
   }, []);
 
   // Finish listening and throw it away.
   const cancel = useCallback(() => {
     cancelled.current = true;
-    recognition.current?.abort();
     if (recorder.current?.state === "recording") recorder.current.stop();
   }, []);
 
   const speak = useCallback(
     async (text: string) => {
       stopSpeaking();
-      if (!text.trim() || settings.tts === "off") return;
-
-      if (settings.tts === "browser" && typeof speechSynthesis !== "undefined") {
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = navigator.language || "en-US";
-        u.onend = () => setState((s) => (s === "speaking" ? "idle" : s));
-        u.onerror = u.onend;
-        setState("speaking");
-        speechSynthesis.speak(u);
-        return;
-      }
+      if (!text.trim()) return;
 
       const abort = new AbortController();
       speechAbort.current = abort;
@@ -236,35 +193,37 @@ export function useVoice({ onTranscript }: { onTranscript: (text: string) => voi
         });
         if (!res.ok) throw new Error("Speech failed");
         const url = URL.createObjectURL(await res.blob());
-        const player = new Audio(url);
-        audio.current = player;
-        player.onended = () => {
-          URL.revokeObjectURL(url);
-          if (audio.current === player) audio.current = null;
+        if (abort.signal.aborted) return URL.revokeObjectURL(url);
+
+        if (!player.current) player.current = new Audio();
+        playerUrl.current = url;
+        await playOn(player.current, url, () => {
+          if (playerUrl.current === url) {
+            URL.revokeObjectURL(url);
+            playerUrl.current = null;
+          }
           setState((s) => (s === "speaking" ? "idle" : s));
-        };
-        await player.play();
+        });
       } catch (err) {
         if ((err as Error).name !== "AbortError") setError("Couldn't play the reply.");
         setState((s) => (s === "speaking" ? "idle" : s));
       }
     },
-    [settings.tts, stopSpeaking],
+    [stopSpeaking],
   );
 
   // Release the mic and audio if the component goes away mid-use.
   useEffect(
     () => () => {
       cancelled.current = true;
-      recognition.current?.abort();
       if (recorder.current?.state === "recording") recorder.current.stop();
       stopMeter.current?.();
       speechAbort.current?.abort();
-      audio.current?.pause();
-      if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+      player.current?.pause();
+      if (playerUrl.current) URL.revokeObjectURL(playerUrl.current);
     },
     [],
   );
 
-  return { state, interim, error, level, start, stop, cancel, speak, stopSpeaking, settings };
+  return { state, error, level, start, stop, cancel, speak, stopSpeaking };
 }

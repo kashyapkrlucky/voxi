@@ -8,10 +8,11 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Voice task assistant",
     start_url: "/",
     display: "standalone",
-    background_color: "#ffffff",
-    theme_color: "#18181b",
+    background_color: "#08080d",
+    theme_color: "#08080d",
     icons: [
-      { src: "/icon", sizes: "512x512", type: "image/png" },
+      { src: "/icon", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/icons/maskable", sizes: "512x512", type: "image/png", purpose: "maskable" },
       { src: "/apple-icon", sizes: "180x180", type: "image/png" },
     ],
   };

@@ -113,13 +113,6 @@ export function NotificationsBar() {
     }
   }
 
-  async function test() {
-    setNote(null);
-    const res = await fetch("/api/push/test", { method: "POST" });
-    const body = await res.json().catch(() => ({}));
-    setNote(res.ok ? `Sent to ${body.sent} device${body.sent === 1 ? "" : "s"}.` : "Test failed.");
-  }
-
   const pill =
     "rounded-full border border-line px-2.5 py-1 text-[11px] font-medium text-muted transition hover:border-line-strong hover:text-fg disabled:opacity-50";
   const on = state === "on";
@@ -147,14 +140,9 @@ export function NotificationsBar() {
           </button>
         )}
         {on && (
-          <div className="flex gap-1">
-            <button onClick={test} disabled={busy} className={pill}>
-              Test
-            </button>
-            <button onClick={disable} disabled={busy} className={pill}>
-              Off
-            </button>
-          </div>
+          <button onClick={disable} disabled={busy} className={pill}>
+            Off
+          </button>
         )}
       </div>
     </div>

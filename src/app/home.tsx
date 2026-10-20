@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Assistant } from "@/app/assistant";
 import { NotificationsBar } from "@/app/notifications";
 import { PlanCard } from "@/app/plan-card";
-import { useIsClient } from "@/app/voice-settings";
+import { useIsClient } from "@/app/use-is-client";
 import { TaskBoard } from "@/app/task-board";
 
 // App shell: the conversation owns the main area; "Today" (plan + tasks) is a sidebar on large screens

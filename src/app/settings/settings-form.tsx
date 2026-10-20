@@ -176,7 +176,7 @@ export function SettingsForm() {
       <Section
         icon={Mic}
         title="Voice"
-        hint="Speech engines are chosen per device, from the Voice menu under the message box on the main page."
+        hint="Voxi listens with OpenAI and answers out loud in her own voice whenever you talk to her. Typed messages get a text reply."
       />
 
       <Section
