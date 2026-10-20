@@ -78,7 +78,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export function TaskBoard() {
+export function TaskBoard({ refreshKey = 0 }: { refreshKey?: number }) {
   const [filter, setFilter] = useState<Filter>("open");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,7 +98,7 @@ export function TaskBoard() {
     return () => {
       cancelled = true;
     };
-  }, [filter, version]);
+  }, [filter, version, refreshKey]);
 
   async function run(action: () => Promise<unknown>) {
     try {

@@ -11,14 +11,18 @@
     "typecheck": "next typegen && tsc --noEmit",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy",
+    "eval": "vitest run --config vitest.eval.config.mts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.98",
+    "@ai-sdk/react": "^4.0.150",
     "@neondatabase/serverless": "^1.2.0",
     "@prisma/adapter-neon": "^7.10.1",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "@trigger.dev/sdk": "^4.7.5",
+    "ai": "^7.0.146",
     "next": "16.4.2",
     "pg": "^8.23.1",
     "react": "19.3.0",

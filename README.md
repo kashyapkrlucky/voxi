@@ -21,6 +21,7 @@ npm run dev                 # http://localhost:3000
 |---|---|
 | `npm run dev` | Next.js dev server |
 | `npm test` | Vitest (repo tests hit the database in `DATABASE_URL`) |
+| `npm run eval` | Agent evals: real OpenAI calls with a fixed clock, checks the resulting DB state (~1 min, a few cents) |
 | `npm run typecheck` | Generates route types, then `tsc --noEmit` |
 | `npm run lint` | ESLint |
 | `npm run db:migrate` | Create/apply a migration in dev (`prisma migrate dev`) |
@@ -35,7 +36,12 @@ src/lib/owner.ts          single-owner "auth" until Google sign-in lands
 src/lib/tasks/            zod schemas + repository (create/update/delete/complete/find)
 src/lib/reminders/        zod schemas + repository (create/list/update/cancel/snooze)
 src/app/api/              REST route handlers
+src/lib/undo.ts           undo via action_log snapshots
+src/lib/agent/            OpenAI agent: tools, instructions, local-time helpers
+src/app/api/chat/         streaming chat endpoint (AI SDK)
+src/app/assistant.tsx     chat panel
 src/app/task-board.tsx    task UI
+evals/                    agent evals
 ```
 
 ## API
@@ -50,6 +56,7 @@ src/app/task-board.tsx    task UI
 | POST | `/api/reminders` | `{ message, fireAt, recurrenceRule?, taskId?, channels? }` |
 | PATCH / DELETE | `/api/reminders/:id` | DELETE cancels |
 | POST | `/api/reminders/:id/snooze` | `{ minutes }` (default 10) |
+| POST | `/api/chat` | AI SDK UI messages; streams the agent reply |
 
 ## Deploying (Vercel + Neon)
 

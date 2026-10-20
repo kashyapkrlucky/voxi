@@ -5,6 +5,8 @@ export const priorities = ["low", "medium", "high", "urgent"] as const;
 export const taskStatuses = ["todo", "in_progress", "done", "cancelled"] as const;
 
 const optionalDate = z.coerce.date().nullable().optional();
+// Accepts real booleans (agent) and "true"/"false" query strings (REST).
+const flag = z.union([z.boolean(), z.stringbool()]).optional();
 
 export const recurrenceRule = z
   .string()
@@ -35,11 +37,11 @@ export const findTasksInput = z.object({
   tag: z.string().optional(),
   dueBefore: z.coerce.date().optional(),
   dueAfter: z.coerce.date().optional(),
-  overdue: z.coerce.boolean().optional(),
-  includeDone: z.coerce.boolean().optional(),
+  overdue: flag,
+  includeDone: flag,
   limit: z.coerce.number().int().positive().max(200).optional(),
 });
 
-export type CreateTaskInput = z.infer<typeof createTaskInput>;
-export type UpdateTaskInput = z.infer<typeof updateTaskInput>;
-export type FindTasksInput = z.infer<typeof findTasksInput>;
+export type CreateTaskInput = z.input<typeof createTaskInput>;
+export type UpdateTaskInput = z.input<typeof updateTaskInput>;
+export type FindTasksInput = z.input<typeof findTasksInput>;

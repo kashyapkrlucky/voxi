@@ -21,6 +21,6 @@ export const listRemindersInput = z.object({
   limit: z.coerce.number().int().positive().max(200).optional(),
 });
 
-export type CreateReminderInput = z.infer<typeof createReminderInput>;
-export type UpdateReminderInput = z.infer<typeof updateReminderInput>;
-export type ListRemindersInput = z.infer<typeof listRemindersInput>;
+export type CreateReminderInput = z.input<typeof createReminderInput>;
+export type UpdateReminderInput = z.input<typeof updateReminderInput>;
+export type ListRemindersInput = z.input<typeof listRemindersInput>;
