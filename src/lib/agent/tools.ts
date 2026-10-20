@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { parseLocal, planView, reminderView, taskView } from "@/lib/agent/format";
 import { acceptPlan, getPlanForDay, proposePlan } from "@/lib/planning/repo";
+import { getSettings, updateSettings } from "@/lib/settings";
 import { localDate } from "@/lib/time";
 import {
   cancelReminder,
@@ -230,6 +231,26 @@ export function buildTools(userId: string, timeZone: string, now?: Date) {
           const reminder = await setBriefing(userId, kind, time, clock());
           return reminder ? r(reminder) : { note: "It was already off" };
         }),
+    }),
+
+    get_settings: tool({
+      description: "Read the user's settings: timezone, working hours, quiet hours.",
+      inputSchema: z.object({}),
+      execute: () => safe(() => getSettings(userId)),
+    }),
+
+    update_settings: tool({
+      description:
+        "Change settings. Working hours are what plans fill; during quiet hours reminders wait until they end. " +
+        "Times are 24h HH:MM. Pass quietStart: null to turn quiet hours off.",
+      inputSchema: z.object({
+        timezone: z.string().optional().describe("IANA name, e.g. Europe/Berlin"),
+        workStart: z.string().optional(),
+        workEnd: z.string().optional(),
+        quietStart: z.string().nullable().optional(),
+        quietEnd: z.string().nullable().optional(),
+      }),
+      execute: (input) => safe(() => updateSettings(userId, input)),
     }),
 
     undo: tool({

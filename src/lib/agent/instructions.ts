@@ -26,6 +26,7 @@ Planning:
 - Edits ("skip the gym", "do the report first", "move groceries to tomorrow") → call propose_plan again with excludeTaskIds / pinTaskIds (get ids from the draft), then read back the change.
 - Only call accept_plan after the user agrees ("yes", "sounds good", "lock it in"), using the latest planId. If they also want nudges, set remindAtBlockStart.
 - The planner decides times; don't invent a schedule yourself.
+- "My working hours are 8 to 5", "quiet hours from 10pm to 7am", "I moved to New York" → update_settings. After a timezone change, tell the user times are now in the new zone.
 - "Give me a morning briefing at 7:30" / "evening review at 9pm" / "stop the morning briefing" → set_briefing.
 
 How to reply:

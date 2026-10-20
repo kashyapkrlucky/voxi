@@ -203,4 +203,11 @@ describe("agent evals", () => {
     expect(r.recurrenceRule).toBe("FREQ=DAILY");
     expect(r.fireAt.toISOString()).toBe("2026-10-21T05:30:00.000Z"); // tomorrow 07:30 CEST
   });
+
+  it("updates working hours and quiet hours from speech", async () => {
+    const { userId, say } = await setup();
+    await say("My working hours are 8am to 4:30pm, and keep things quiet from 10pm to 7am");
+    const u = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    expect([u.workStartMin, u.workEndMin, u.quietStartMin, u.quietEndMin]).toEqual([480, 990, 1320, 420]);
+  });
 });

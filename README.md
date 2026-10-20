@@ -36,6 +36,17 @@ and only locks it in when you agree. Locking in sets each task's `scheduledFor`;
 "Morning briefing at 7:30" / "evening review at 9pm" set daily briefing reminders. The morning one drafts today's
 plan and summarises it; the evening one says what you finished and what's still open.
 
+## Settings and your data
+
+`/settings` (or just tell Voxi: "my working hours are 8 to 5", "quiet hours 10pm to 7am", "I moved to New York"):
+timezone, working hours (what plans fill), and quiet hours. A reminder due during quiet hours is held until they end;
+a repeating one keeps its schedule and that occurrence is delivered when quiet hours end. Changing timezone keeps
+daily briefings at the same local time. `OWNER_TIMEZONE` only seeds a new account.
+
+The conversation is saved, so "that task" still works after a reload; "New chat" starts fresh. "Export my data" on
+the settings page downloads everything as JSON (tasks, reminders, plans, chats), which is your backup beyond Neon's
+short restore window.
+
 ## Reminders
 
 Each active reminder has one Trigger.dev delayed run, created/cancelled/rescheduled whenever the reminder changes
@@ -79,6 +90,10 @@ src/lib/undo.ts           undo via action_log snapshots
 src/lib/time.ts           timezone helpers (local wall clock ↔ UTC, DST-aware)
 src/lib/planning/         planner.ts (scoring + fitting), repo.ts (propose/accept), briefing.ts
 src/app/plan-card.tsx     today's plan card
+src/lib/chat.ts           persisted conversation (one current chat; "New chat" starts another)
+src/lib/settings.ts       timezone, working hours, quiet hours
+src/lib/export.ts         JSON export of all user data
+src/app/settings/         settings page
 src/lib/agent/            OpenAI agent: tools, instructions, local-time helpers
 src/app/api/chat/         streaming chat endpoint (AI SDK)
 src/app/assistant.tsx     chat panel, mic button, voice settings
@@ -104,7 +119,11 @@ evals/                    agent evals
 | POST | `/api/reminders` | `{ message, fireAt, recurrenceRule?, taskId?, channels? }` |
 | PATCH / DELETE | `/api/reminders/:id` | DELETE cancels |
 | POST | `/api/reminders/:id/snooze` | `{ minutes }` (default 10) |
-| POST | `/api/chat` | AI SDK UI messages; streams the agent reply |
+| GET | `/api/chat` | current conversation `{ id, messages }` |
+| POST | `/api/chat` | `{ id, message }` (only the new message); streams the reply, saves the chat |
+| POST | `/api/chat/new` | starts a new conversation |
+| GET / PATCH | `/api/settings` | `{ timezone, workStart, workEnd, quietStart, quietEnd }` (times `HH:MM`) |
+| GET | `/api/export` | downloads all your data as JSON |
 | POST | `/api/transcribe` | multipart `audio` file → `{ text }` |
 | POST | `/api/speech` | `{ text }` → mp3 audio |
 | POST | `/api/reminders/:id/done` | notification "Done": completes the linked task |

@@ -44,21 +44,25 @@ enum ReminderStatus {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String?  @unique
-  name         String?
-  timezone     String   @default("UTC")
+  id            String   @id @default(cuid())
+  email         String?  @unique
+  name          String?
+  timezone      String   @default("UTC")
   // Working hours as minutes after local midnight; planning fills tasks into this window.
-  workStartMin Int      @default(540) @map("work_start_min")
-  workEndMin   Int      @default(1080) @map("work_end_min")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  workStartMin  Int      @default(540) @map("work_start_min")
+  workEndMin    Int      @default(1080) @map("work_end_min")
+  // Quiet hours (minutes after local midnight, may wrap past midnight); reminders wait until they end.
+  quietStartMin Int?     @map("quiet_start_min")
+  quietEndMin   Int?     @map("quiet_end_min")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   tasks             Task[]
   reminders         Reminder[]
   actions           ActionLog[]
   pushSubscriptions PushSubscription[]
   plans             Plan[]
+  chats             Chat[]
 
   @@map("users")
 }
@@ -130,6 +134,20 @@ model Plan {
 
   @@index([userId, date, status])
   @@map("plans")
+}
+
+// The conversation with Voxi, stored as AI SDK UI messages. The newest chat is the current one.
+model Chat {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  messages  Json     @default("[]")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("chats")
 }
 
 // One per installed browser/device that allowed notifications.

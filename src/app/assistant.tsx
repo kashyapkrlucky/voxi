@@ -1,8 +1,8 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { getToolName, isToolUIPart, type UIMessage } from "ai";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { DefaultChatTransport, getToolName, isToolUIPart, type UIMessage } from "ai";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVoice } from "@/app/use-voice";
 import {
   browserSttSupported,
@@ -35,6 +35,8 @@ const toolLabels: Record<string, string> = {
   get_plan: "Checked plan",
   accept_plan: "Locked in plan",
   set_briefing: "Updated briefing",
+  get_settings: "Checked settings",
+  update_settings: "Updated settings",
   undo: "Undid last change",
 };
 
@@ -59,6 +61,12 @@ function ToolChip({ part: p }: { part: UIMessage["parts"][number] }) {
   );
 }
 
+// The server-side conversation this page is talking to (there's one chat panel per page).
+let currentChatId: string | null = null;
+const setCurrentChatId = (id: string) => {
+  currentChatId = id;
+};
+
 function replyText(message: UIMessage): string {
   return message.parts.map((p) => (p.type === "text" ? p.text : "")).join(" ").trim();
 }
@@ -69,14 +77,45 @@ export function Assistant({ onChange }: { onChange: () => void }) {
   const voiceTurn = useRef(false);
   const speakRef = useRef<(text: string) => void>(() => {});
 
-  const { messages, sendMessage, status, error, stop, regenerate } = useChat({
+  // The conversation lives on the server; we send only the new message and the chat id.
+  const [loaded, setLoaded] = useState(false);
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        prepareSendMessagesRequest: ({ messages }) => ({ body: { id: currentChatId, message: messages.at(-1) } }),
+      }),
+    [],
+  );
+
+  const { messages, setMessages, sendMessage, status, error, stop, regenerate } = useChat({
+    transport,
     onFinish: ({ message }) => {
       onChange();
       if (voiceTurn.current) speakRef.current(replyText(message));
       voiceTurn.current = false;
     },
   });
-  const busy = status === "submitted" || status === "streaming";
+  const busy = status === "submitted" || status === "streaming" || !loaded;
+
+  useEffect(() => {
+    fetch("/api/chat")
+      .then((r) => r.json())
+      .then((saved: { id: string; messages: UIMessage[] }) => {
+        setCurrentChatId(saved.id);
+        setMessages(saved.messages);
+      })
+      .finally(() => setLoaded(true));
+  }, [setMessages]);
+
+  async function newChat() {
+    stop();
+    voice.stopSpeaking();
+    const res = await fetch("/api/chat/new", { method: "POST" });
+    if (!res.ok) return;
+    setCurrentChatId((await res.json()).id);
+    setMessages([]);
+  }
 
   const voice = useVoice({
     onTranscript: (text) => {
@@ -146,9 +185,17 @@ export function Assistant({ onChange }: { onChange: () => void }) {
   const listening = voice.state === "listening";
 
   return (
-    <section className="rounded-lg border border-zinc-200 dark:border-zinc-800">
+    <section className="relative rounded-lg border border-zinc-200 dark:border-zinc-800">
+      {messages.length > 0 && (
+        <button
+          onClick={newChat}
+          className="absolute right-2 top-2 z-10 rounded-md bg-white/80 px-2 py-0.5 text-xs text-zinc-500 backdrop-blur hover:text-zinc-800 dark:bg-zinc-950/80 dark:hover:text-zinc-200"
+        >
+          New chat
+        </button>
+      )}
       <div className="max-h-80 space-y-3 overflow-y-auto p-3">
-        {messages.length === 0 && (
+        {loaded && messages.length === 0 && (
           <div className="flex flex-wrap gap-2">
             {suggestions.map((s) => (
               <button
