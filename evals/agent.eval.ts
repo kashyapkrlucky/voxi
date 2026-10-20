@@ -10,7 +10,12 @@ const NOW = new Date("2026-10-20T17:00:00Z");
 const TZ = "Europe/Berlin";
 
 const cleanups: (() => Promise<unknown>)[] = [];
+const turnMs: number[] = [];
 afterAll(async () => {
+  const sorted = [...turnMs].sort((a, b) => a - b);
+  const p = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+  // Written to stderr so it shows even when the reporter hides console output.
+  process.stderr.write(`\nagent turns: n=${sorted.length} median=${p(0.5)}ms p90=${p(0.9)}ms max=${sorted.at(-1)}ms\n`);
   await Promise.all(cleanups.map((c) => c()));
   await prisma.$disconnect();
 });
@@ -23,7 +28,9 @@ async function setup() {
   // Sends one user turn and keeps the history for follow-ups.
   async function say(text: string) {
     messages.push({ role: "user", content: text });
+    const started = Date.now();
     const result = await runAgent({ userId: user.userId, timeZone: TZ, now: NOW }, messages);
+    turnMs.push(Date.now() - started);
     messages.push(...result.response.messages);
     const tools = result.steps.flatMap((s) => s.toolCalls.map((c) => c.toolName));
     return { text: result.text, tools };

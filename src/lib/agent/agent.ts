@@ -16,7 +16,8 @@ function config({ userId, timeZone, now = new Date() }: AgentContext) {
       openai: {
         // Optional tool args need non-strict schemas.
         strictJsonSchema: false,
-        reasoningEffort: "low",
+        // Lower effort = faster replies, which matters for voice.
+        reasoningEffort: (process.env.OPENAI_REASONING_EFFORT ?? "low") as OpenAILanguageModelResponsesOptions["reasoningEffort"],
         reasoningSummary: null,
         store: false,
       } satisfies OpenAILanguageModelResponsesOptions,

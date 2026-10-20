@@ -15,6 +15,16 @@ npm run dev                 # http://localhost:3000
 
 `npm test` creates and deletes throwaway users in whatever database `DATABASE_URL` points at, so point it at the Neon `dev` branch, not production.
 
+## Voice
+
+Hold the mic button (or Space) to talk, release to send; Esc cancels. Talking while Voxi speaks interrupts it.
+Replies are spoken only for turns started by voice. The bar under the chat picks the engines (saved per device):
+
+- **Hearing:** Browser (Web Speech API, free; Chrome sends audio to Google) or OpenAI (`OPENAI_TRANSCRIBE_MODEL`).
+- **Voice:** Browser speech synthesis, OpenAI (`OPENAI_TTS_MODEL`, `OPENAI_TTS_VOICE`), or off.
+
+The mic needs HTTPS or localhost.
+
 ## Scripts
 
 | Script | What it does |
@@ -39,7 +49,9 @@ src/app/api/              REST route handlers
 src/lib/undo.ts           undo via action_log snapshots
 src/lib/agent/            OpenAI agent: tools, instructions, local-time helpers
 src/app/api/chat/         streaming chat endpoint (AI SDK)
-src/app/assistant.tsx     chat panel
+src/app/assistant.tsx     chat panel, mic button, voice settings
+src/app/use-voice.ts      push-to-talk (browser or OpenAI STT), speech output, barge-in
+src/lib/speech.ts         OpenAI transcription + TTS
 src/app/task-board.tsx    task UI
 evals/                    agent evals
 ```
@@ -57,6 +69,8 @@ evals/                    agent evals
 | PATCH / DELETE | `/api/reminders/:id` | DELETE cancels |
 | POST | `/api/reminders/:id/snooze` | `{ minutes }` (default 10) |
 | POST | `/api/chat` | AI SDK UI messages; streams the agent reply |
+| POST | `/api/transcribe` | multipart `audio` file → `{ text }` |
+| POST | `/api/speech` | `{ text }` → mp3 audio |
 
 ## Deploying (Vercel + Neon)
 
