@@ -1,6 +1,28 @@
 # Voxi
 
-Personal voice assistant for tasks and reminders. Design and roadmap: [plan.md](plan.md).
+A voice-first assistant for your tasks, reminders and day plans. Tap the orb and just say it — "add a task to renew
+my passport by Friday", "remind me to call mom at 7", "plan my day", "I'm done with the report" — and Voxi does it,
+answers out loud, and reminds you on time with push notifications. You can type too.
+
+![Voxi: the voice orb and today's plan](docs/screenshots/home-dark.jpg)
+
+## Screenshots
+
+| Talking to Voxi | Listening |
+| :---: | :---: |
+| ![Conversation with tool activity and today's plan](docs/screenshots/conversation-dark.jpg) | ![The Liquid orb listening, glowing with your voice](docs/screenshots/listening-dark.jpg) |
+| **Light mode** | **Settings** |
+| ![Conversation in light mode](docs/screenshots/conversation-light.jpg) | ![Timezone, working hours, quiet hours and data export](docs/screenshots/settings-light.jpg) |
+
+<p align="center">
+  <img src="docs/screenshots/mobile-dark.jpg" alt="Voxi on iPhone: conversation" width="260" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/mobile-today-dark.jpg" alt="Voxi on iPhone: today's plan and tasks" width="260" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/signin-dark.jpg" alt="Sign in with Google" width="640" />
+</p>
 
 ## Local setup
 
