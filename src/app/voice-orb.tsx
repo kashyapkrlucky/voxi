@@ -5,20 +5,22 @@ import { useEffect, useRef, type CSSProperties, type RefObject } from "react";
 
 export type OrbState = "idle" | "listening" | "transcribing" | "thinking" | "speaking";
 
-// Each state has its own palette and tempo; the gradient body spins, the halo breathes with mic level.
+// "Liquid" orb: a morphing gradient blob. Each state has its own palette and tempo; colours cross-fade
+// (the --c* properties are registered in globals.css) and the blob swells with mic level while listening.
 const palettes: Record<OrbState, [string, string, string]> = {
-  idle: ["#7c5cff", "#22b8e6", "#c084fc"],
-  listening: ["#ff4d8d", "#ff8a3d", "#b05cff"],
-  transcribing: ["#6366f1", "#22d3ee", "#a78bfa"],
-  thinking: ["#6366f1", "#22d3ee", "#8b5cf6"],
-  speaking: ["#22d3ee", "#7c5cff", "#34d399"],
+  idle: ["#6ee7f9", "#5b8cff", "#a78bfa"],
+  listening: ["#ffb36b", "#ff5c8a", "#c26bff"],
+  transcribing: ["#5b8cff", "#6ee7f9", "#a78bfa"],
+  thinking: ["#5b8cff", "#6ee7f9", "#7c9cff"],
+  speaking: ["#5eead4", "#5b8cff", "#6ee7f9"],
 };
-const spin: Record<OrbState, string> = {
-  idle: "9s",
-  listening: "3.5s",
-  transcribing: "1.4s",
-  thinking: "1.2s",
-  speaking: "4s",
+// Morph period (shape change) and drift period (slow rotation) per state.
+const tempo: Record<OrbState, { morph: number; drift: number }> = {
+  idle: { morph: 8, drift: 18 },
+  listening: { morph: 2.2, drift: 6 },
+  transcribing: { morph: 1.6, drift: 3 },
+  thinking: { morph: 1.4, drift: 2.5 },
+  speaking: { morph: 3, drift: 8 },
 };
 
 const TAP_MS = 280;
@@ -57,14 +59,18 @@ export function VoiceOrb({
   }, [level]);
 
   const [c1, c2, c3] = palettes[state];
-  const px = size === "lg" ? 148 : 60;
+  const { morph, drift } = tempo[state];
+  const px = size === "lg" ? 156 : 60;
   const style = {
     width: px,
     height: px,
     "--c1": c1,
     "--c2": c2,
     "--c3": c3,
-    "--spin": spin[state],
+    "--morph": `${morph}s`,
+    "--morph-slow": `${morph * 1.35}s`,
+    "--morph-fast": `${morph * 0.7}s`,
+    "--drift": `${drift}s`,
   } as CSSProperties;
 
   const label = listening
@@ -108,62 +114,54 @@ export function VoiceOrb({
         onCancel();
       }}
       onContextMenu={(e) => e.preventDefault()}
-      className="group relative shrink-0 touch-none select-none rounded-full outline-none transition-transform duration-300 focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:opacity-50 active:scale-[0.97]"
+      className="liquid-orb group relative shrink-0 touch-none select-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-4 focus-visible:ring-offset-canvas disabled:opacity-50 active:scale-[0.96]"
     >
-      {/* Halo */}
+      {/* Halo: swells with your voice */}
       <span
         aria-hidden
-        className="pointer-events-none absolute -inset-[35%] rounded-full opacity-60 blur-2xl transition-opacity duration-500 group-hover:opacity-80"
+        className="pointer-events-none absolute -inset-[40%] rounded-full opacity-55 blur-2xl transition-opacity duration-500 group-hover:opacity-75"
         style={{
-          background: "radial-gradient(closest-side, var(--c1), var(--c2) 55%, transparent)",
-          transform: "scale(calc(0.85 + var(--level, 0) * 0.9))",
-          transition: "transform 80ms linear",
+          background: "radial-gradient(closest-side, var(--c2), var(--c1) 50%, transparent)",
+          transform: "scale(calc(0.8 + var(--level, 0) * 1))",
+          transition: "transform 90ms linear",
         }}
       />
-      {/* Ripples while listening */}
-      {listening && (
-        <>
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-0 rounded-full border-2 border-[var(--c1)] [animation:orb-ripple_1.8s_ease-out_infinite]"
-          />
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-0 rounded-full border-2 border-[var(--c2)] [animation:orb-ripple_1.8s_ease-out_0.9s_infinite]"
-          />
-        </>
-      )}
-      {/* Body */}
+      {/* Body: swells with level while listening, pulses while speaking, breathes when idle */}
       <span
         aria-hidden
-        className={`absolute inset-0 overflow-hidden rounded-full shadow-[0_10px_40px_-8px_var(--c1)] ${
+        className={`pointer-events-none absolute inset-0 ${
           state === "speaking"
             ? "[animation:orb-speak_1.6s_ease-in-out_infinite]"
             : state === "idle"
-              ? "[animation:orb-breathe_5s_ease-in-out_infinite]"
+              ? "[animation:orb-breathe_6s_ease-in-out_infinite]"
               : ""
         }`}
         style={
           listening
-            ? { transform: "scale(calc(1 + var(--level, 0) * 0.16))", transition: "transform 80ms linear" }
+            ? { transform: "scale(calc(1 + var(--level, 0) * 0.22))", transition: "transform 90ms linear" }
             : undefined
         }
       >
+        {/* A second, blurred blob behind gives depth */}
         <span
-          className="absolute -inset-1/4 [animation:orb-spin_var(--spin)_linear_infinite]"
-          style={{ background: "conic-gradient(from 0deg, var(--c1), var(--c2), var(--c3), var(--c1))" }}
+          className="absolute -inset-[6%] opacity-60 blur-md [animation:liquid_var(--morph-slow)_ease-in-out_infinite_reverse]"
+          style={{ background: "linear-gradient(200deg, var(--c3), var(--c1))" }}
         />
-        <span
-          className="absolute inset-0 rounded-full"
-          style={{
-            background:
-              "radial-gradient(circle at 32% 26%, rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.08) 38%, transparent 60%), radial-gradient(circle at 70% 85%, rgb(0 0 0 / 0.25), transparent 55%)",
-          }}
-        />
-        <span className="absolute inset-0 rounded-full ring-1 ring-inset ring-white/25" />
+        {/* Main blob drifts (rotates) while its outline morphs, so the gradient keeps moving */}
+        <span className="absolute inset-0 [animation:orb-spin_var(--drift)_linear_infinite]">
+          <span
+            className="absolute inset-0 shadow-[inset_0_-8px_24px_rgb(0_0_0/0.18),0_12px_40px_-12px_var(--c2)] [animation:liquid_var(--morph)_ease-in-out_infinite]"
+            style={{ background: "linear-gradient(140deg, var(--c1), var(--c2) 48%, var(--c3))" }}
+          />
+          {/* Glossy highlight moving against the main morph */}
+          <span
+            className="absolute left-[12%] top-[10%] h-[55%] w-[55%] opacity-70 [animation:liquid_var(--morph-fast)_ease-in-out_infinite_reverse]"
+            style={{ background: "linear-gradient(160deg, rgb(255 255 255 / 0.55), transparent 70%)" }}
+          />
+        </span>
       </span>
       {/* Icon */}
-      <span className="relative flex h-full w-full items-center justify-center text-white drop-shadow-[0_1px_6px_rgb(0_0_0/0.35)]">
+      <span className="relative flex h-full w-full items-center justify-center text-white drop-shadow-[0_1px_8px_rgb(0_0_0/0.3)]">
         <Icon
           className={`${size === "lg" ? "size-10" : "size-6"} ${Icon === Loader2 ? "animate-spin" : ""}`}
           strokeWidth={size === "lg" ? 1.75 : 2}
@@ -173,17 +171,17 @@ export function VoiceOrb({
   );
 }
 
-// Small static mark used as the logo and the assistant's avatar.
+// Static Liquid mark used as the logo and the assistant's avatar. Only the voice orb animates.
 export function OrbMark({ className = "size-6" }: { className?: string }) {
   return (
-    <span
-      aria-hidden
-      className={`relative inline-block shrink-0 overflow-hidden rounded-full shadow-[0_2px_10px_-2px_#7c5cff] ${className}`}
-      style={{ background: "conic-gradient(from 210deg, #7c5cff, #22b8e6, #c084fc, #7c5cff)" }}
-    >
+    <span aria-hidden className={`relative inline-block shrink-0 ${className}`}>
       <span
-        className="absolute inset-0 rounded-full"
-        style={{ background: "radial-gradient(circle at 32% 26%, rgb(255 255 255 / 0.6), transparent 55%)" }}
+        className="absolute inset-0 rounded-full shadow-[0_3px_12px_-3px_#5b8cff]"
+        style={{ background: "linear-gradient(140deg, #6ee7f9, #5b8cff 48%, #a78bfa)" }}
+      />
+      <span
+        className="absolute left-[14%] top-[12%] h-1/2 w-1/2 rounded-full opacity-70"
+        style={{ background: "linear-gradient(160deg, rgb(255 255 255 / 0.6), transparent 70%)" }}
       />
     </span>
   );

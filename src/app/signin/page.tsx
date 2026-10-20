@@ -25,9 +25,9 @@ export default async function SignInPage({ searchParams }: PageProps<"/signin">)
           <span
             aria-hidden
             className="absolute -inset-6 rounded-full opacity-70 blur-2xl"
-            style={{ background: "radial-gradient(closest-side, #7c5cff, #22b8e6 60%, transparent)" }}
+            style={{ background: "radial-gradient(closest-side, #5b8cff, #6ee7f9 60%, transparent)" }}
           />
-          <OrbMark className="relative size-24 [animation:orb-breathe_5s_ease-in-out_infinite]" />
+          <OrbMark className="relative size-24" />
         </div>
         <h1 className="text-2xl font-semibold tracking-tight">Welcome to Voxi</h1>
         <p className="mt-2 text-sm text-muted">Your voice-first assistant for tasks, reminders and plans.</p>

@@ -131,7 +131,7 @@ export function PlanCard({ refreshKey, onChange }: { refreshKey: number; onChang
                       finished
                         ? "bg-success ring-success/15"
                         : current
-                          ? "bg-accent ring-accent/25 [animation:orb-breathe_2s_ease-in-out_infinite]"
+                          ? "bg-accent ring-accent/25"
                           : "bg-line-strong ring-transparent"
                     }`}
                   />

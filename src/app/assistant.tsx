@@ -454,7 +454,7 @@ function AssistantTurn({ message }: { message: UIMessage }) {
 function Thinking() {
   return (
     <div className="animate-rise flex items-center gap-3" aria-label="Voxi is thinking">
-      <OrbMark className="size-7 [animation:orb-breathe_1.2s_ease-in-out_infinite]" />
+      <OrbMark className="size-7" />
       <span className="flex gap-1">
         {[0, 1, 2].map((i) => (
           <span
