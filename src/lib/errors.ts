@@ -12,3 +12,10 @@ export class PlanStateError extends Error {
     this.name = "PlanStateError";
   }
 }
+
+export class UnauthorizedError extends Error {
+  constructor() {
+    super("Sign in required");
+    this.name = "UnauthorizedError";
+  }
+}

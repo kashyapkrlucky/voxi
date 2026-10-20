@@ -1,8 +1,10 @@
+import { connection } from "next/server";
 import { handle, readJson } from "@/lib/api";
 import { getCurrentUserId } from "@/lib/owner";
 import { getSettings, updateSettings, type UpdateSettingsInput } from "@/lib/settings";
 
 export async function GET() {
+  await connection(); // per-user data: run at request time, never prerender at build
   return handle(async () => getSettings(await getCurrentUserId()));
 }
 

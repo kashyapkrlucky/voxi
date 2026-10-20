@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import {
   convertToModelMessages,
   createIdGenerator,
@@ -29,6 +30,7 @@ const body = z.object({
 
 // The current conversation, for the page to show on load.
 export async function GET() {
+  await connection(); // per-user data: run at request time, never prerender at build
   return handle(async () => {
     const chat = await getCurrentChat((await getCurrentUser()).id);
     return { id: chat.id, messages: chatMessages(chat) };
@@ -39,12 +41,13 @@ export async function POST(req: Request) {
   const parsed = body.safeParse(await readJson(req));
   if (!parsed.success) return Response.json({ error: "Invalid input" }, { status: 400 });
 
-  const user = await getCurrentUser();
-  let chat;
+  let user, chat;
   try {
+    user = await getCurrentUser();
     chat = await getChat(user.id, parsed.data.id);
-  } catch {
-    return Response.json({ error: "Chat not found" }, { status: 404 });
+  } catch (err) {
+    // Lets handle() turn "signed out" into 401 and a missing chat into 404.
+    return handle(() => Promise.reject(err));
   }
 
   const message = parsed.data.message as unknown as UIMessage;

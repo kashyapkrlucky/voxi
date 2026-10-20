@@ -10,6 +10,8 @@ export default defineConfig({
     setupFiles: ["dotenv/config"],
     // Don't create real Trigger.dev runs from tests.
     env: { REMINDER_SCHEDULER: "off" },
+    // next-auth imports "next/server" without an extension; let Vite resolve it instead of Node's ESM loader.
+    server: { deps: { inline: ["next-auth"] } },
     // Repo tests share one Postgres; run files one at a time.
     fileParallelism: false,
   },

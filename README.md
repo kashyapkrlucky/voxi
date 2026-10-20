@@ -133,8 +133,26 @@ evals/                    agent evals
 | POST | `/api/plans` | `{ day?, days? }` drafts a plan |
 | POST | `/api/plans/:id/accept` | `{ remindAtBlockStart? }` locks it in |
 
-## Deploying (Vercel + Neon)
+## Sign-in
 
-Set `DATABASE_URL` (Neon pooled URL), `DIRECT_URL` (Neon direct URL), `OWNER_EMAIL`, `OWNER_TIMEZONE`, the OpenAI vars, the VAPID vars and the **prod** `TRIGGER_SECRET_KEY` in Vercel, then run `npm run db:deploy` against Neon once.
-Trigger.dev prod runs need `DATABASE_URL` and the VAPID vars too: add them in the Trigger.dev dashboard (Environment variables → Prod), then `npm run trigger:deploy`.
-There is **no auth yet**, so anyone with the URL can use a deployed instance. Keep it local, or behind Vercel Deployment Protection, until Google sign-in is added.
+Google sign-in via Auth.js (`src/auth.ts`), limited to `AUTH_ALLOWED_EMAILS` (default: `OWNER_EMAIL`). Sessions are
+signed JWT cookies (30 days); the first sign-in creates your user row, keyed by email. `src/proxy.ts` sends signed-out
+page visits to `/signin` and answers signed-out API calls with 401. Sign out from the settings page.
+
+For automated local testing without Google, `AUTH_DEV_BYPASS=true` acts as `OWNER_EMAIL`; it's ignored in production.
+
+## Deploying (Vercel + Neon + Trigger.dev)
+
+1. **Google Cloud → Credentials → your OAuth client:** add `https://YOUR-DOMAIN/api/auth/callback/google` as an
+   authorized redirect URI (keep the localhost one for dev). If the consent screen is in "Testing", add your Google
+   account as a test user.
+2. **Neon:** apply migrations to the production branch once: `npm run db:deploy` with `DIRECT_URL` pointing at it.
+3. **Vercel → Project → Settings → Environment Variables (Production):**
+   `DATABASE_URL` (pooled), `DIRECT_URL`, `OPENAI_API_KEY` (+ optional `OPENAI_*` model vars), `AUTH_SECRET`,
+   `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `OWNER_EMAIL`, `OWNER_TIMEZONE`, `VAPID_PUBLIC_KEY`,
+   `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, and the **prod** `TRIGGER_SECRET_KEY`
+   (`tr_prod_…`). Don't set `AUTH_DEV_BYPASS`. Vercel sets the trusted host for Auth.js automatically.
+4. **Trigger.dev dashboard → Environment variables → Prod:** `DATABASE_URL`, `OPENAI_API_KEY` and `OPENAI_MODEL`
+   (the morning briefing drafts a plan), `TRIGGER_SECRET_KEY` (prod), and the four VAPID vars. Then
+   `npm run trigger:deploy`.
+5. **Deploy** (push to the connected GitHub repo, or `vercel --prod`), open the site, sign in, turn on notifications.
