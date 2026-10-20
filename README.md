@@ -25,6 +25,22 @@ Replies are spoken only for turns started by voice. The bar under the chat picks
 
 The mic needs HTTPS or localhost.
 
+## Reminders
+
+Each active reminder has one Trigger.dev delayed run, created/cancelled/rescheduled whenever the reminder changes
+(including snooze and undo). The run sends a web push to every device that turned notifications on, then marks the
+reminder fired or re-arms it for its next recurrence. An hourly `sweep-reminders` cron delivers anything that slipped
+through (labelled "Missed reminder"); it's hourly because the Trigger.dev free plan allows at most one cron run per hour.
+
+Locally, reminders only fire while the worker runs:
+
+```bash
+npm run trigger:dev
+```
+
+Turn notifications on from the bar under the chat. On iPhone, add Voxi to the Home Screen first (iOS only allows web
+push for installed web apps), and Done/Snooze buttons aren't shown there.
+
 ## Scripts
 
 | Script | What it does |
@@ -34,6 +50,8 @@ The mic needs HTTPS or localhost.
 | `npm run eval` | Agent evals: real OpenAI calls with a fixed clock, checks the resulting DB state (~1 min, a few cents) |
 | `npm run typecheck` | Generates route types, then `tsc --noEmit` |
 | `npm run lint` | ESLint |
+| `npm run trigger:dev` | Trigger.dev worker for local reminder delivery |
+| `npm run trigger:deploy` | Deploy tasks to Trigger.dev prod |
 | `npm run db:migrate` | Create/apply a migration in dev (`prisma migrate dev`) |
 | `npm run db:deploy` | Apply migrations in prod (`prisma migrate deploy`) |
 
@@ -52,6 +70,10 @@ src/app/api/chat/         streaming chat endpoint (AI SDK)
 src/app/assistant.tsx     chat panel, mic button, voice settings
 src/app/use-voice.ts      push-to-talk (browser or OpenAI STT), speech output, barge-in
 src/lib/speech.ts         OpenAI transcription + TTS
+src/lib/push.ts           web push sending + subscriptions
+src/lib/reminders/        scheduler.ts (Trigger.dev runs), fire.ts (delivery logic)
+src/jobs/reminders.ts     Trigger.dev tasks: fire-reminder, sweep-reminders
+public/sw.js              service worker: notifications, Done / Snooze
 src/app/task-board.tsx    task UI
 evals/                    agent evals
 ```
@@ -71,8 +93,12 @@ evals/                    agent evals
 | POST | `/api/chat` | AI SDK UI messages; streams the agent reply |
 | POST | `/api/transcribe` | multipart `audio` file → `{ text }` |
 | POST | `/api/speech` | `{ text }` → mp3 audio |
+| POST | `/api/reminders/:id/done` | notification "Done": completes the linked task |
+| POST / DELETE | `/api/push/subscribe` | browser `PushSubscription` JSON / `{ endpoint }` |
+| POST | `/api/push/test` | sends a test notification |
 
 ## Deploying (Vercel + Neon)
 
-Set `DATABASE_URL` (Neon pooled URL), `DIRECT_URL` (Neon direct URL), `OWNER_EMAIL` and `OWNER_TIMEZONE` in Vercel, then run `npm run db:deploy` against Neon once.
+Set `DATABASE_URL` (Neon pooled URL), `DIRECT_URL` (Neon direct URL), `OWNER_EMAIL`, `OWNER_TIMEZONE`, the OpenAI vars, the VAPID vars and the **prod** `TRIGGER_SECRET_KEY` in Vercel, then run `npm run db:deploy` against Neon once.
+Trigger.dev prod runs need `DATABASE_URL` and the VAPID vars too: add them in the Trigger.dev dashboard (Environment variables → Prod), then `npm run trigger:deploy`.
 There is **no auth yet**, so anyone with the URL can use a deployed instance. Keep it local, or behind Vercel Deployment Protection, until Google sign-in is added.

@@ -12,7 +12,9 @@
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "eval": "vitest run --config vitest.eval.config.mts"
+    "eval": "vitest run --config vitest.eval.config.mts",
+    "trigger:dev": "trigger.dev dev",
+    "trigger:deploy": "trigger.dev deploy"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.98",
@@ -28,6 +30,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "rrule": "^2.8.1",
+    "web-push": "^3.6.7",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -37,6 +40,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "dotenv": "^18.0.8",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",

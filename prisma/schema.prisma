@@ -39,9 +39,10 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tasks     Task[]
-  reminders Reminder[]
-  actions   ActionLog[]
+  tasks             Task[]
+  reminders         Reminder[]
+  actions           ActionLog[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
@@ -94,6 +95,23 @@ model Reminder {
 
   @@index([userId, status, fireAt])
   @@map("reminders")
+}
+
+// One per installed browser/device that allowed notifications.
+model PushSubscription {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  deviceLabel String?   @map("device_label")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  lastUsedAt  DateTime? @map("last_used_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 // Every state change goes through here; powers undo and audit.

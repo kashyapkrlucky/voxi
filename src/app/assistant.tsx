@@ -127,6 +127,18 @@ export function Assistant({ onChange }: { onChange: () => void }) {
     };
   }, [startListening, voice]);
 
+  // A reminder arriving while the app is open is also spoken (the service worker relays pushes here).
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === "reminder" && e.data.body && voice.state !== "listening") {
+        voice.speak(`Reminder: ${e.data.body}`);
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, [voice]);
+
   const listening = voice.state === "listening";
 
   return (

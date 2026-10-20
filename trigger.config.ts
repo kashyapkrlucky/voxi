@@ -1,3 +1,4 @@
+import { prismaExtension } from "@trigger.dev/build/extensions/prisma";
 import { defineConfig } from "@trigger.dev/sdk";
 
 export default defineConfig({
@@ -19,4 +20,8 @@ export default defineConfig({
     },
   },
   dirs: ["src/jobs"],
+  build: {
+    // Prisma 7 client is generated into src/generated/prisma by `prisma generate` (postinstall).
+    extensions: [prismaExtension({ mode: "modern" })],
+  },
 });

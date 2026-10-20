@@ -2,6 +2,8 @@ import type { Prisma, Reminder } from "@/generated/prisma/client";
 import { logAction } from "@/lib/action-log";
 import { prisma } from "@/lib/db";
 import { NotFoundError } from "@/lib/errors";
+import { syncReminderSchedule } from "@/lib/reminders/scheduler";
+import { completeTask } from "@/lib/tasks/repo";
 import {
   createReminderInput,
   listRemindersInput,
@@ -11,8 +13,7 @@ import {
   type UpdateReminderInput,
 } from "@/lib/reminders/schema";
 
-// Scheduling the actual delivery (Trigger.dev delayed runs) arrives in Phase 3;
-// for now these functions only manage the rows.
+// Each change is mirrored to a Trigger.dev delayed run (see scheduler.ts) after the transaction commits.
 
 async function getOwned(tx: Prisma.TransactionClient, userId: string, id: string): Promise<Reminder> {
   const reminder = await tx.reminder.findFirst({ where: { id, userId } });
@@ -28,12 +29,14 @@ async function assertTaskOwned(tx: Prisma.TransactionClient, userId: string, tas
 
 export async function createReminder(userId: string, input: CreateReminderInput): Promise<Reminder> {
   const data = createReminderInput.parse(input);
-  return prisma.$transaction(async (tx) => {
+  const reminder = await prisma.$transaction(async (tx) => {
     await assertTaskOwned(tx, userId, data.taskId);
     const reminder = await tx.reminder.create({ data: { ...data, userId } });
     await logAction(tx, { userId, tool: "create_reminder", args: data, after: reminder });
     return reminder;
   });
+  await syncReminderSchedule(reminder);
+  return reminder;
 }
 
 export async function listReminders(userId: string, input: ListRemindersInput = {}): Promise<Reminder[]> {
@@ -55,7 +58,7 @@ export async function listReminders(userId: string, input: ListRemindersInput = 
 
 export async function updateReminder(userId: string, id: string, input: UpdateReminderInput): Promise<Reminder> {
   const data = updateReminderInput.parse(input);
-  return prisma.$transaction(async (tx) => {
+  const reminder = await prisma.$transaction(async (tx) => {
     const before = await getOwned(tx, userId, id);
     await assertTaskOwned(tx, userId, data.taskId);
     // Moving the fire time re-arms a fired/snoozed reminder.
@@ -64,15 +67,19 @@ export async function updateReminder(userId: string, id: string, input: UpdateRe
     await logAction(tx, { userId, tool: "update_reminder", args: { id, ...data }, before, after: reminder });
     return reminder;
   });
+  await syncReminderSchedule(reminder);
+  return reminder;
 }
 
 export async function cancelReminder(userId: string, id: string): Promise<Reminder> {
-  return prisma.$transaction(async (tx) => {
+  const reminder = await prisma.$transaction(async (tx) => {
     const before = await getOwned(tx, userId, id);
     const reminder = await tx.reminder.update({ where: { id }, data: { status: "cancelled" } });
     await logAction(tx, { userId, tool: "cancel_reminder", args: { id }, before, after: reminder });
     return reminder;
   });
+  await syncReminderSchedule(reminder);
+  return reminder;
 }
 
 export async function snoozeReminder(
@@ -84,7 +91,7 @@ export async function snoozeReminder(
   if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 24 * 60) {
     throw new RangeError("minutes must be an integer between 1 and 1440");
   }
-  return prisma.$transaction(async (tx) => {
+  const reminder = await prisma.$transaction(async (tx) => {
     const before = await getOwned(tx, userId, id);
     const reminder = await tx.reminder.update({
       where: { id },
@@ -93,4 +100,22 @@ export async function snoozeReminder(
     await logAction(tx, { userId, tool: "snooze_reminder", args: { id, minutes }, before, after: reminder });
     return reminder;
   });
+  await syncReminderSchedule(reminder);
+  return reminder;
+}
+
+// "Done" on a notification: completes the linked task, and stops a one-off reminder that's still pending.
+export async function acknowledgeReminder(userId: string, id: string): Promise<Reminder> {
+  let reminder = await prisma.reminder.findFirst({ where: { id, userId } });
+  if (!reminder) throw new NotFoundError("Reminder", id);
+
+  if (reminder.taskId) {
+    const task = await prisma.task.findFirst({ where: { id: reminder.taskId, userId, deletedAt: null } });
+    if (task && task.status !== "done") await completeTask(userId, task.id);
+  }
+  if (!reminder.recurrenceRule && (reminder.status === "scheduled" || reminder.status === "snoozed")) {
+    reminder = await prisma.reminder.update({ where: { id }, data: { status: "fired", lastFiredAt: new Date() } });
+    await syncReminderSchedule(reminder);
+  }
+  return reminder;
 }

@@ -8,6 +8,8 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["dotenv/config"],
+    // Don't create real Trigger.dev runs from tests.
+    env: { REMINDER_SCHEDULER: "off" },
     // Repo tests share one Postgres; run files one at a time.
     fileParallelism: false,
   },

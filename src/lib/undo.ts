@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import { syncReminderScheduleById } from "@/lib/reminders/scheduler";
 
 type Snapshot = Record<string, unknown> & { id: string };
 
@@ -20,7 +21,8 @@ export type UndoneAction = { tool: string; summary: string };
 
 // Reverts the most recent `steps` actions, newest first, using the before/after snapshots in action_log.
 export async function undoLast(userId: string, steps = 1): Promise<UndoneAction[]> {
-  return prisma.$transaction(async (tx) => {
+  const reminderIds = new Set<string>();
+  const undone = await prisma.$transaction(async (tx) => {
     const entries = await tx.actionLog.findMany({
       where: { userId, undone: false },
       orderBy: [{ ts: "desc" }, { id: "desc" }],
@@ -31,11 +33,16 @@ export async function undoLast(userId: string, steps = 1): Promise<UndoneAction[
     for (const entry of entries) {
       const before = entry.before as Snapshot | null;
       const after = entry.after as Snapshot | { task: Snapshot; next: Snapshot | null } | null;
-      undone.push(await revert(tx, entry.tool, before, after));
+      const { reminderId, ...action } = await revert(tx, entry.tool, before, after);
+      if (reminderId) reminderIds.add(reminderId);
+      undone.push(action);
       await tx.actionLog.update({ where: { id: entry.id }, data: { undone: true } });
     }
     return undone;
   });
+  // Restored reminders need their delivery runs re-armed (or cancelled).
+  for (const id of reminderIds) await syncReminderScheduleById(id);
+  return undone;
 }
 
 async function revert(
@@ -43,7 +50,7 @@ async function revert(
   tool: string,
   before: Snapshot | null,
   after: unknown,
-): Promise<UndoneAction> {
+): Promise<UndoneAction & { reminderId?: string }> {
   switch (tool) {
     case "create_task": {
       const task = after as Snapshot;
@@ -62,13 +69,13 @@ async function revert(
     case "create_reminder": {
       const reminder = after as Snapshot;
       await tx.reminder.update({ where: { id: reminder.id }, data: { status: "cancelled" } });
-      return { tool, summary: `Cancelled reminder "${reminder.message}"` };
+      return { tool, summary: `Cancelled reminder "${reminder.message}"`, reminderId: reminder.id };
     }
     case "update_reminder":
     case "cancel_reminder":
     case "snooze_reminder": {
       await tx.reminder.update({ where: { id: before!.id }, data: pick(before!, reminderFields) });
-      return { tool, summary: `Restored reminder "${before!.message}"` };
+      return { tool, summary: `Restored reminder "${before!.message}"`, reminderId: before!.id };
     }
     default:
       throw new Error(`Cannot undo ${tool}`);

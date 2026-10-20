@@ -10,6 +10,8 @@ export default defineConfig({
     environment: "node",
     include: ["evals/**/*.eval.ts"],
     setupFiles: ["dotenv/config"],
+    // Don't create real Trigger.dev runs from tests.
+    env: { REMINDER_SCHEDULER: "off" },
     testTimeout: 90_000,
     fileParallelism: false,
   },
