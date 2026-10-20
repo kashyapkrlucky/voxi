@@ -1,5 +1,6 @@
 "use client";
 
+import { Bell, BellOff, BellRing } from "lucide-react";
 import { useEffect, useState } from "react";
 
 type PushState = "loading" | "unsupported" | "denied" | "off" | "on";
@@ -14,8 +15,26 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
 
 function deviceLabel(): string {
   const ua = navigator.userAgent;
-  const device = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "Device";
-  const browser = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "Browser";
+  const device = /iPhone/.test(ua)
+    ? "iPhone"
+    : /iPad/.test(ua)
+      ? "iPad"
+      : /Android/.test(ua)
+        ? "Android"
+        : /Mac/.test(ua)
+          ? "Mac"
+          : /Windows/.test(ua)
+            ? "Windows"
+            : "Device";
+  const browser = /Edg\//.test(ua)
+    ? "Edge"
+    : /Chrome\//.test(ua)
+      ? "Chrome"
+      : /Firefox\//.test(ua)
+        ? "Firefox"
+        : /Safari\//.test(ua)
+          ? "Safari"
+          : "Browser";
   return `${device} · ${browser}`;
 }
 
@@ -40,7 +59,9 @@ export function NotificationsBar() {
   const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => {
-    currentState().then(setState).catch(() => setState("unsupported"));
+    currentState()
+      .then(setState)
+      .catch(() => setState("unsupported"));
   }, []);
 
   async function enable() {
@@ -99,33 +120,43 @@ export function NotificationsBar() {
     setNote(res.ok ? `Sent to ${body.sent} device${body.sent === 1 ? "" : "s"}.` : "Test failed.");
   }
 
-  const link = "underline underline-offset-2 hover:text-zinc-800 disabled:opacity-50 dark:hover:text-zinc-200";
+  const pill =
+    "rounded-full border border-line px-2.5 py-1 text-[11px] font-medium text-muted transition hover:border-line-strong hover:text-fg disabled:opacity-50";
+  const on = state === "on";
+  const Icon = on ? BellRing : state === "denied" || state === "unsupported" ? BellOff : Bell;
+  const label = {
+    loading: "Checking notifications…",
+    unsupported: "Notifications aren't supported here. On iPhone, add Voxi to the Home Screen first.",
+    denied: "Notifications are blocked. Allow them in your browser's site settings.",
+    off: "Reminders won't reach this device.",
+    on: "Reminders will notify this device.",
+  }[state];
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-      <span>Reminder notifications:</span>
-      {state === "loading" && <span>…</span>}
-      {state === "unsupported" && (
-        <span>not supported in this browser (on iPhone, add Voxi to the Home Screen first).</span>
-      )}
-      {state === "denied" && <span>blocked. Allow notifications for this site in your browser settings.</span>}
-      {state === "off" && (
-        <button onClick={enable} disabled={busy} className={link}>
-          Turn on for this device
-        </button>
-      )}
-      {state === "on" && (
-        <>
-          <span className="text-emerald-600 dark:text-emerald-400">on for this device</span>
-          <button onClick={test} disabled={busy} className={link}>
-            Send test
+    <div className="space-y-2">
+      <div className="flex items-center gap-2.5">
+        <span
+          className={`flex size-7 shrink-0 items-center justify-center rounded-full ${on ? "bg-success/15 text-success" : "bg-panel-3 text-faint"}`}
+        >
+          <Icon className="size-3.5" />
+        </span>
+        <p className="min-w-0 flex-1 text-[11px] leading-snug text-muted">{note ?? label}</p>
+        {state === "off" && (
+          <button onClick={enable} disabled={busy} className={pill}>
+            Turn on
           </button>
-          <button onClick={disable} disabled={busy} className={link}>
-            Turn off
-          </button>
-        </>
-      )}
-      {note && <span>{note}</span>}
+        )}
+        {on && (
+          <div className="flex gap-1">
+            <button onClick={test} disabled={busy} className={pill}>
+              Test
+            </button>
+            <button onClick={disable} disabled={busy} className={pill}>
+              Off
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

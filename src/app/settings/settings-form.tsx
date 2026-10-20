@@ -1,5 +1,6 @@
 "use client";
 
+import { Briefcase, Download, Globe2, type LucideIcon, Mic, Moon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type Settings = {
@@ -11,16 +12,31 @@ type Settings = {
 };
 
 const field =
-  "rounded-md border border-zinc-300 bg-transparent px-2 py-1.5 text-sm dark:border-zinc-700 disabled:opacity-50";
+  "rounded-xl border border-line bg-panel-solid px-3 py-2 text-sm text-fg outline-none transition focus:border-line-strong disabled:opacity-50";
 
-function Section({ title, hint, children }: { title: string; hint?: string; children?: React.ReactNode }) {
+function Section({
+  title,
+  hint,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  icon: LucideIcon;
+  children?: React.ReactNode;
+}) {
   return (
-    <section className="space-y-3 border-b border-zinc-200 pb-6 dark:border-zinc-800">
-      <div>
-        <h2 className="text-sm font-semibold">{title}</h2>
-        {hint && <p className="text-xs text-zinc-500">{hint}</p>}
+    <section className="glass flex gap-4 rounded-2xl border border-line p-4 sm:p-5">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-panel-3 text-accent">
+        <Icon className="size-[18px]" />
+      </span>
+      <div className="min-w-0 flex-1 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold">{title}</h2>
+          {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
+        </div>
+        {children}
       </div>
-      {children}
     </section>
   );
 }
@@ -47,7 +63,7 @@ export function SettingsForm() {
       .catch(() => setStatus({ kind: "error", text: "Couldn't load settings" }));
   }, []);
 
-  if (!draft || !saved) return <p className="text-sm text-zinc-500">Loading…</p>;
+  if (!draft || !saved) return <div className="h-64 animate-pulse rounded-2xl bg-panel-2" />;
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   const quietOn = draft.quietStart !== null;
@@ -78,8 +94,8 @@ export function SettingsForm() {
   }
 
   return (
-    <div className="space-y-6">
-      <Section title="Timezone" hint="Due dates, reminders and plans use this.">
+    <div className="space-y-3">
+      <Section icon={Globe2} title="Timezone" hint="Due dates, reminders and plans use this.">
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={draft.timezone}
@@ -96,7 +112,7 @@ export function SettingsForm() {
           {deviceZone !== draft.timezone && (
             <button
               onClick={() => set({ timezone: deviceZone })}
-              className="text-xs text-zinc-500 underline underline-offset-2"
+              className="rounded-full border border-line px-2.5 py-1 text-xs text-muted transition hover:border-line-strong hover:text-fg"
             >
               Use this device&apos;s ({deviceZone.replaceAll("_", " ")})
             </button>
@@ -104,7 +120,7 @@ export function SettingsForm() {
         </div>
       </Section>
 
-      <Section title="Working hours" hint="Plans fill tasks into this window.">
+      <Section icon={Briefcase} title="Working hours" hint="Plans fill tasks into this window.">
         <div className="flex items-center gap-2 text-sm">
           <input
             type="time"
@@ -113,7 +129,7 @@ export function SettingsForm() {
             className={field}
             aria-label="Work start"
           />
-          <span className="text-zinc-500">to</span>
+          <span className="text-muted">to</span>
           <input
             type="time"
             value={draft.workEnd}
@@ -124,9 +140,10 @@ export function SettingsForm() {
         </div>
       </Section>
 
-      <Section title="Quiet hours" hint="Reminders that come due in this window are held until it ends.">
-        <label className="flex items-center gap-2 text-sm">
+      <Section icon={Moon} title="Quiet hours" hint="Reminders that come due in this window are held until it ends.">
+        <label className="flex cursor-pointer items-center gap-2.5 text-sm">
           <input
+            className="size-4 accent-[var(--accent)]"
             type="checkbox"
             checked={quietOn}
             onChange={(e) =>
@@ -144,7 +161,7 @@ export function SettingsForm() {
               className={field}
               aria-label="Quiet start"
             />
-            <span className="text-zinc-500">to</span>
+            <span className="text-muted">to</span>
             <input
               type="time"
               value={draft.quietEnd ?? ""}
@@ -156,34 +173,35 @@ export function SettingsForm() {
         )}
       </Section>
 
-      <Section title="Voice" hint="Speech engines are chosen per device, in the bar under the chat on the main page." />
+      <Section
+        icon={Mic}
+        title="Voice"
+        hint="Speech engines are chosen per device, from the Voice menu under the message box on the main page."
+      />
 
       <Section
+        icon={Download}
         title="Your data"
         hint="Download everything Voxi stores for you as a JSON file: tasks, reminders, plans and chats."
       >
         <a
           href="/api/export"
-          className="inline-block rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          className="inline-flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-sm text-fg transition hover:border-line-strong hover:bg-panel-3"
         >
-          Export my data
+          <Download className="size-3.5" /> Export my data
         </a>
       </Section>
 
-      <div className="flex items-center gap-3">
+      <div className="sticky bottom-4 z-10 flex items-center gap-3 pt-2">
         <button
           onClick={save}
           disabled={!dirty || saving}
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+          className="rounded-full bg-fg px-5 py-2 text-sm font-medium text-canvas shadow-soft transition hover:opacity-90 disabled:opacity-40"
         >
           {saving ? "Saving…" : "Save"}
         </button>
         {status && (
-          <span
-            className={`text-sm ${status.kind === "ok" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
-          >
-            {status.text}
-          </span>
+          <span className={`text-sm ${status.kind === "ok" ? "text-success" : "text-danger"}`}>{status.text}</span>
         )}
       </div>
     </div>

@@ -27,6 +27,37 @@ function recognitionCtor(): RecognitionCtor | undefined {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition;
 }
 
+// Live microphone loudness (0–1) for the orb. Writes into a callback every animation frame.
+function createMeter(stream: MediaStream, onLevel: (v: number) => void): () => void {
+  const ctx = new AudioContext();
+  // Created after an await, so it may start suspended; the press that started listening allows resuming.
+  void ctx.resume();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  ctx.createMediaStreamSource(stream).connect(analyser);
+  const data = new Uint8Array(analyser.fftSize);
+  let smoothed = 0;
+  let raf = 0;
+  const tick = () => {
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (const sample of data) {
+      const v = (sample - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / data.length);
+    smoothed = smoothed * 0.7 + Math.min(1, rms * 5) * 0.3;
+    onLevel(smoothed);
+    raf = requestAnimationFrame(tick);
+  };
+  tick();
+  return () => {
+    cancelAnimationFrame(raf);
+    void ctx.close();
+    onLevel(0);
+  };
+}
+
 function errorMessage(err: unknown): string {
   const name = err instanceof DOMException ? err.name : typeof err === "string" ? err : "";
   if (name === "NotAllowedError" || name === "not-allowed" || name === "service-not-allowed") {
@@ -48,6 +79,9 @@ export function useVoice({ onTranscript }: { onTranscript: (text: string) => voi
   const audio = useRef<HTMLAudioElement | null>(null);
   const speechAbort = useRef<AbortController | null>(null);
   const startedAt = useRef(0);
+  // Mic loudness for visuals; read it in an animation loop, not during render.
+  const level = useRef(0);
+  const stopMeter = useRef<(() => void) | null>(null);
   const cancelled = useRef(false);
   const onTranscriptRef = useRef(onTranscript);
 
@@ -55,7 +89,19 @@ export function useVoice({ onTranscript }: { onTranscript: (text: string) => voi
     onTranscriptRef.current = onTranscript;
   }, [onTranscript]);
 
+  const meter = useCallback((stream: MediaStream) => {
+    stopMeter.current?.();
+    const stop = createMeter(stream, (v) => {
+      level.current = v;
+    });
+    stopMeter.current = () => {
+      stop();
+      stopMeter.current = null;
+    };
+  }, []);
+
   const deliver = useCallback((text: string) => {
+    stopMeter.current?.();
     setInterim("");
     setState("idle");
     if (!cancelled.current && text.trim()) onTranscriptRef.current(text.trim());
@@ -95,13 +141,24 @@ export function useVoice({ onTranscript }: { onTranscript: (text: string) => voi
       rec.onerror = (e) => {
         if (e.error !== "aborted" && e.error !== "no-speech") setError(errorMessage(e.error));
       };
+      // The Web Speech API doesn't expose audio, so open the mic separately just to drive the visuals.
+      let meterStream: MediaStream | null = null;
       rec.onend = () => {
         recognition.current = null;
+        meterStream?.getTracks().forEach((t) => t.stop());
         deliver(text);
       };
       recognition.current = rec;
       setState("listening");
       rec.start();
+      navigator.mediaDevices
+        ?.getUserMedia({ audio: true })
+        .then((stream) => {
+          if (!recognition.current) return stream.getTracks().forEach((t) => t.stop());
+          meterStream = stream;
+          meter(stream);
+        })
+        .catch(() => {});
       return;
     }
 
@@ -111,6 +168,7 @@ export function useVoice({ onTranscript }: { onTranscript: (text: string) => voi
       const chunks: Blob[] = [];
       rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
       rec.onstop = async () => {
+        stopMeter.current?.();
         stream.getTracks().forEach((t) => t.stop());
         recorder.current = null;
         if (cancelled.current || Date.now() - startedAt.current < MIN_RECORDING_MS) return deliver("");
@@ -131,11 +189,12 @@ export function useVoice({ onTranscript }: { onTranscript: (text: string) => voi
       recorder.current = rec;
       setState("listening");
       rec.start();
+      meter(stream);
     } catch (err) {
       setError(errorMessage(err));
       setState("idle");
     }
-  }, [settings.stt, stopSpeaking, deliver]);
+  }, [settings.stt, stopSpeaking, deliver, meter]);
 
   // Finish listening and send what was heard.
   const stop = useCallback(() => {
@@ -199,6 +258,7 @@ export function useVoice({ onTranscript }: { onTranscript: (text: string) => voi
       cancelled.current = true;
       recognition.current?.abort();
       if (recorder.current?.state === "recording") recorder.current.stop();
+      stopMeter.current?.();
       speechAbort.current?.abort();
       audio.current?.pause();
       if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
@@ -206,5 +266,5 @@ export function useVoice({ onTranscript }: { onTranscript: (text: string) => voi
     [],
   );
 
-  return { state, interim, error, start, stop, cancel, speak, stopSpeaking, settings };
+  return { state, interim, error, level, start, stop, cancel, speak, stopSpeaking, settings };
 }
