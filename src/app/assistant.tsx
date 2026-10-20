@@ -229,7 +229,7 @@ export function Assistant({ onChange, onOpenTasks }: { onChange: () => void; onO
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Top bar */}
-      <header className="flex items-center gap-3 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6">
+      <header className="flex items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)_+_0.75rem)] sm:px-6">
         <div className="flex items-center gap-2.5">
           <OrbMark className="size-7" />
           <span className="text-[17px] font-semibold tracking-tight">Voxi</span>

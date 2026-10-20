@@ -64,7 +64,7 @@ function TodayPanel({
     : "";
   return (
     <>
-      <div className="flex items-center gap-3 px-5 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
+      <div className="flex items-center gap-3 px-5 pb-3 pt-[calc(env(safe-area-inset-top)_+_1rem)]">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Today</h2>
           <p className="h-4 text-xs text-muted">{today}</p>
