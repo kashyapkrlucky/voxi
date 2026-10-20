@@ -14,10 +14,12 @@ function createClient() {
   return new PrismaClient({ adapter });
 }
 
-// Reuse one client across hot reloads in dev.
+// Reuse one client across hot reloads in dev. After `prisma generate` the PrismaClient class is new,
+// so a client cached from the old one (missing new models) is replaced instead of reused.
 const globalForPrisma = globalThis as unknown as { prisma?: ReturnType<typeof createClient> };
 
-export const prisma = globalForPrisma.prisma ?? createClient();
+const cached = globalForPrisma.prisma;
+export const prisma = cached instanceof PrismaClient ? cached : createClient();
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 

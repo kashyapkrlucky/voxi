@@ -1,5 +1,5 @@
 import { ZodError } from "zod";
-import { NotFoundError } from "@/lib/errors";
+import { NotFoundError, PlanStateError } from "@/lib/errors";
 
 // Runs a route handler body and maps known errors to HTTP responses.
 export async function handle(fn: () => Promise<unknown>, status = 200): Promise<Response> {
@@ -11,6 +11,7 @@ export async function handle(fn: () => Promise<unknown>, status = 200): Promise<
     }
     if (err instanceof NotFoundError) return Response.json({ error: err.message }, { status: 404 });
     if (err instanceof RangeError) return Response.json({ error: err.message }, { status: 400 });
+    if (err instanceof PlanStateError) return Response.json({ error: err.message }, { status: 409 });
     console.error(err);
     return Response.json({ error: "Internal error" }, { status: 500 });
   }

@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { NotFoundError } from "@/lib/errors";
 import { syncReminderSchedule } from "@/lib/reminders/scheduler";
 import { completeTask } from "@/lib/tasks/repo";
+import { addDays, atLocal, localDate } from "@/lib/time";
+import type { ReminderKind } from "@/generated/prisma/enums";
 import {
   createReminderInput,
   listRemindersInput,
@@ -118,4 +120,31 @@ export async function acknowledgeReminder(userId: string, id: string): Promise<R
     await syncReminderSchedule(reminder);
   }
   return reminder;
+}
+
+const briefingLabel = { morning_briefing: "Morning briefing", evening_review: "Evening review" } as const;
+
+// Turns the daily briefing on at a local time ("07:30"), moves it, or turns it off (null).
+export async function setBriefing(
+  userId: string,
+  kind: Exclude<ReminderKind, "reminder">,
+  time: string | null,
+  now: Date = new Date(),
+): Promise<Reminder | null> {
+  const existing = await prisma.reminder.findFirst({
+    where: { userId, kind, status: { in: ["scheduled", "snoozed"] } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (time === null) return existing ? cancelReminder(userId, existing.id) : null;
+
+  const m = /^(\d{1,2}):(\d{2})$/.exec(time);
+  if (!m || +m[1] > 23 || +m[2] > 59) throw new RangeError(`Invalid time "${time}", expected HH:MM`);
+  const { timezone } = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
+  const minutes = +m[1] * 60 + +m[2];
+  const today = localDate(now, timezone);
+  let fireAt = atLocal(today, minutes, timezone);
+  if (fireAt <= now) fireAt = atLocal(addDays(today, 1), minutes, timezone);
+
+  const data = { message: briefingLabel[kind], fireAt, recurrenceRule: "FREQ=DAILY" };
+  return existing ? updateReminder(userId, existing.id, data) : createReminder(userId, { ...data, kind });
 }

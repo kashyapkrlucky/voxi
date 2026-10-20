@@ -1,4 +1,5 @@
 import { RRule } from "rrule";
+import { localIso, parseLocal } from "@/lib/time";
 
 // Accepts "FREQ=WEEKLY;BYDAY=MO" with or without a leading "RRULE:".
 function parse(rule: string, dtstart: Date): RRule {
@@ -17,7 +18,9 @@ export function isValidRecurrenceRule(rule: string): boolean {
 }
 
 // Next occurrence strictly after `from`, anchored at `from`. Null when the rule has ended.
-// Note: evaluated in UTC; BYDAY/BYHOUR rules near midnight may need the user's timezone later.
-export function nextOccurrence(rule: string, from: Date): Date | null {
-  return parse(rule, from).after(from, false);
+// Evaluated on the user's wall clock ("floating" time), so "daily at 08:00" stays at 08:00 local across DST.
+export function nextOccurrence(rule: string, from: Date, timeZone = "UTC"): Date | null {
+  const floating = new Date(`${localIso(from, timeZone)}:${String(from.getUTCSeconds()).padStart(2, "0")}Z`);
+  const next = parse(rule, floating).after(floating, false);
+  return next ? parseLocal(next.toISOString().slice(0, 19), timeZone) : null;
 }

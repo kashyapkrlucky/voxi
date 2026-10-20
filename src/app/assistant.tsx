@@ -31,6 +31,10 @@ const toolLabels: Record<string, string> = {
   update_reminder: "Updated reminder",
   cancel_reminder: "Cancelled reminder",
   snooze_reminder: "Snoozed reminder",
+  propose_plan: "Drafted plan",
+  get_plan: "Checked plan",
+  accept_plan: "Locked in plan",
+  set_briefing: "Updated briefing",
   undo: "Undid last change",
 };
 

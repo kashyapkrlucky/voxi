@@ -1,76 +1,8 @@
-import type { Reminder, Task } from "@/generated/prisma/client";
+import type { Plan, Reminder, Task } from "@/generated/prisma/client";
+import { planBlocks, planUnscheduled } from "@/lib/planning/repo";
+import { formatLocal, localIso } from "@/lib/time";
 
-// Human-readable local time so the model can speak it without doing timezone math.
-export function formatLocal(date: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
-}
-
-function wallClock(date: Date, timeZone: string) {
-  return Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(date)
-      .map((p) => [p.type, p.value]),
-  );
-}
-
-// Minutes the zone is ahead of UTC at that instant (DST-aware).
-function offsetMinutes(date: Date, timeZone: string): number {
-  const p = wallClock(date, timeZone);
-  const local = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
-  return Math.round((local - Math.floor(date.getTime() / 1000) * 1000) / 60_000);
-}
-
-// ISO 8601 with the zone's offset, e.g. 2026-10-20T19:05:00+02:00.
-export function isoInZone(date: Date, timeZone: string): string {
-  const p = wallClock(date, timeZone);
-  const offsetMin = offsetMinutes(date, timeZone);
-  const sign = offsetMin >= 0 ? "+" : "-";
-  const abs = Math.abs(offsetMin);
-  const offset = `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
-  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}${offset}`;
-}
-
-// Wall-clock time in the zone without offset, e.g. 2026-10-20T19:05 (what tools take and return).
-export function localIso(date: Date, timeZone: string): string {
-  return isoInZone(date, timeZone).slice(0, 16);
-}
-
-const LOCAL_DATETIME = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-
-// Parses a wall-clock time in `timeZone` ("2026-10-26T09:00", or a bare date = midnight).
-// Strings that already carry an offset or Z are taken as-is.
-export function parseLocal(value: string, timeZone: string): Date {
-  const m = LOCAL_DATETIME.exec(value.trim());
-  if (!m) {
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) throw new RangeError(`Invalid date-time: ${value}`);
-    return d;
-  }
-  const [, y, mo, d, h = "0", mi = "0", s = "0"] = m;
-  const asUtc = Date.UTC(+y, +mo - 1, +d, +h, +mi, +s);
-  // Use the offset at the target instant, not today's, so DST boundaries come out right.
-  let guess = asUtc - offsetMinutes(new Date(asUtc), timeZone) * 60_000;
-  guess = asUtc - offsetMinutes(new Date(guess), timeZone) * 60_000;
-  return new Date(guess);
-}
+export { formatLocal, isoInZone, localIso, parseLocal } from "@/lib/time";
 
 // Compact shapes for tool results: fewer tokens, no internal fields.
 export function taskView(task: Task, timeZone: string) {
@@ -93,10 +25,34 @@ export function reminderView(reminder: Reminder, timeZone: string) {
   return {
     id: reminder.id,
     message: reminder.message,
+    ...(reminder.kind !== "reminder" ? { kind: reminder.kind } : {}),
     status: reminder.status,
     fires: formatLocal(reminder.fireAt, timeZone),
     fireAt: localIso(reminder.fireAt, timeZone),
     ...(reminder.recurrenceRule ? { recurrenceRule: reminder.recurrenceRule } : {}),
     ...(reminder.taskId ? { taskId: reminder.taskId } : {}),
+  };
+}
+
+export function planView(plan: Plan, freeMinutes: number | null, timeZone: string) {
+  const unscheduled = planUnscheduled(plan);
+  const hm = (iso: string) => localIso(new Date(iso), timeZone).slice(11);
+  const multiDay = plan.days > 1;
+  return {
+    planId: plan.id,
+    status: plan.status,
+    date: plan.date,
+    days: plan.days,
+    blocks: planBlocks(plan).map((b) => ({
+      taskId: b.taskId,
+      title: b.title,
+      ...(multiDay ? { day: formatLocal(new Date(b.start), timeZone).slice(0, 11) } : {}),
+      start: hm(b.start),
+      end: hm(b.end),
+      why: b.reason,
+    })),
+    notScheduled: unscheduled.slice(0, 8).map((u) => ({ taskId: u.taskId, title: u.title, why: u.reason })),
+    ...(unscheduled.length > 8 ? { moreNotScheduled: unscheduled.length - 8 } : {}),
+    ...(freeMinutes !== null ? { freeMinutesLeft: freeMinutes } : {}),
   };
 }

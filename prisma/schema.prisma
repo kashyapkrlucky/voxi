@@ -24,6 +24,18 @@ enum Priority {
   urgent
 }
 
+enum ReminderKind {
+  reminder
+  morning_briefing
+  evening_review
+}
+
+enum PlanStatus {
+  proposed
+  accepted
+  superseded
+}
+
 enum ReminderStatus {
   scheduled
   fired
@@ -32,17 +44,21 @@ enum ReminderStatus {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String?  @unique
-  name      String?
-  timezone  String   @default("UTC")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(cuid())
+  email        String?  @unique
+  name         String?
+  timezone     String   @default("UTC")
+  // Working hours as minutes after local midnight; planning fills tasks into this window.
+  workStartMin Int      @default(540) @map("work_start_min")
+  workEndMin   Int      @default(1080) @map("work_end_min")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   tasks             Task[]
   reminders         Reminder[]
   actions           ActionLog[]
   pushSubscriptions PushSubscription[]
+  plans             Plan[]
 
   @@map("users")
 }
@@ -80,6 +96,7 @@ model Reminder {
   id             String         @id @default(cuid())
   userId         String         @map("user_id")
   taskId         String?        @map("task_id")
+  kind           ReminderKind   @default(reminder)
   message        String
   fireAt         DateTime       @map("fire_at")
   recurrenceRule String?        @map("recurrence_rule")
@@ -95,6 +112,24 @@ model Reminder {
 
   @@index([userId, status, fireAt])
   @@map("reminders")
+}
+
+// A proposed or accepted schedule for a day (or a week, starting on `date`).
+model Plan {
+  id          String     @id @default(cuid())
+  userId      String     @map("user_id")
+  date        String // local calendar date the plan starts on, e.g. 2026-10-21
+  days        Int        @default(1)
+  status      PlanStatus @default(proposed)
+  blocks      Json // [{ taskId, title, start, end }] with ISO instants
+  unscheduled Json // [{ taskId, title, reason }]
+  createdAt   DateTime   @default(now()) @map("created_at")
+  acceptedAt  DateTime?  @map("accepted_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date, status])
+  @@map("plans")
 }
 
 // One per installed browser/device that allowed notifications.

@@ -20,16 +20,17 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-async function setup() {
+async function setup(now: Date = NOW) {
   const user = await createTestUser();
   cleanups.push(user.cleanup);
+  await prisma.user.update({ where: { id: user.userId }, data: { timezone: TZ } });
   const messages: ModelMessage[] = [];
 
   // Sends one user turn and keeps the history for follow-ups.
   async function say(text: string) {
     messages.push({ role: "user", content: text });
     const started = Date.now();
-    const result = await runAgent({ userId: user.userId, timeZone: TZ, now: NOW }, messages);
+    const result = await runAgent({ userId: user.userId, timeZone: TZ, now }, messages);
     turnMs.push(Date.now() - started);
     messages.push(...result.response.messages);
     const tools = result.steps.flatMap((s) => s.toolCalls.map((c) => c.toolName));
@@ -143,5 +144,63 @@ describe("agent evals", () => {
 
     await say("Undo that");
     expect((await tasks())[0].priority).toBe("medium");
+  });
+
+  // --- Planning: these need the planner's clock to match the agent's, so they pass the morning time through. ---
+
+  it("drafts a day plan without locking it in", async () => {
+    const morning = new Date("2026-10-20T06:30:00Z"); // 08:30 Berlin
+    const { userId, say } = await setup(morning);
+    await createTask(userId, { title: "Submit report", dueAt: new Date("2026-10-19T10:00:00Z"), estimateMin: 60 });
+    await createTask(userId, { title: "Fix login bug", priority: "urgent", estimateMin: 90 });
+    await createTask(userId, { title: "Read article", priority: "low" });
+
+    const { text, tools } = await say("Plan my day");
+    expect(tools).toContain("propose_plan");
+    expect(tools).not.toContain("accept_plan");
+    expect(text.toLowerCase()).toMatch(/report|login/);
+    expect(text).toMatch(/\?/); // asks to lock it in
+    expect(await prisma.plan.count({ where: { userId, status: "accepted" } })).toBe(0);
+  });
+
+  it("applies an edit and locks the plan in", async () => {
+    const morning = new Date("2026-10-20T06:30:00Z");
+    const { userId, say, tasks } = await setup(morning);
+    await createTask(userId, { title: "Go to the gym", estimateMin: 60 });
+    await createTask(userId, { title: "Write proposal", priority: "high", estimateMin: 90 });
+    await createTask(userId, { title: "Buy groceries", estimateMin: 30 });
+
+    await say("Plan my day");
+    await say("Skip the gym today and lock it in");
+    const plan = await prisma.plan.findFirst({ where: { userId, status: "accepted" } });
+    expect(plan).not.toBeNull();
+    const byTitle = Object.fromEntries((await tasks()).map((t) => [t.title, t.scheduledFor]));
+    expect(byTitle["Go to the gym"]).toBeNull();
+    expect(byTitle["Write proposal"]).not.toBeNull();
+    expect(byTitle["Buy groceries"]).not.toBeNull();
+  });
+
+  it("plans a free evening window", async () => {
+    const { userId, say } = await setup(new Date("2026-10-20T15:00:00Z")); // 17:00 Berlin
+    await createTask(userId, { title: "Tidy desk", estimateMin: 30 });
+    await createTask(userId, { title: "Call grandma", estimateMin: 30 });
+    await createTask(userId, { title: "Sort photos", estimateMin: 90 });
+
+    await say("I have an hour free tonight from 8, what should I do?");
+    const plan = await prisma.plan.findFirstOrThrow({ where: { userId }, orderBy: { createdAt: "desc" } });
+    const blocks = plan.blocks as { start: string; end: string }[];
+    expect(blocks.length).toBeGreaterThan(0);
+    expect(new Date(blocks[0].start).toISOString()).toBe("2026-10-20T18:00:00.000Z"); // 20:00 Berlin
+    const minutes = blocks.reduce((m, b) => m + (new Date(b.end).getTime() - new Date(b.start).getTime()) / 60_000, 0);
+    expect(minutes).toBeLessThanOrEqual(60);
+  });
+
+  it("sets up a morning briefing", async () => {
+    const { say, reminders } = await setup();
+    await say("Give me a morning briefing every day at 7:30");
+    const [r] = await reminders();
+    expect(r.kind).toBe("morning_briefing");
+    expect(r.recurrenceRule).toBe("FREQ=DAILY");
+    expect(r.fireAt.toISOString()).toBe("2026-10-21T05:30:00.000Z"); // tomorrow 07:30 CEST
   });
 });

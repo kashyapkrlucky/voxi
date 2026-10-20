@@ -1,14 +1,21 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { parseLocal, reminderView, taskView } from "@/lib/agent/format";
-import { cancelReminder, createReminder, listReminders, snoozeReminder, updateReminder } from "@/lib/reminders/repo";
+import { parseLocal, planView, reminderView, taskView } from "@/lib/agent/format";
+import { acceptPlan, getPlanForDay, proposePlan } from "@/lib/planning/repo";
+import { localDate } from "@/lib/time";
+import {
+  cancelReminder,
+  createReminder,
+  listReminders,
+  setBriefing,
+  snoozeReminder,
+  updateReminder,
+} from "@/lib/reminders/repo";
 import { completeTask, createTask, deleteTask, findTasks, updateTask } from "@/lib/tasks/repo";
 import { priorities, taskStatuses } from "@/lib/tasks/schema";
 import { undoLast } from "@/lib/undo";
 
-const isoTime = z
-  .string()
-  .describe("Local date-time in the user's timezone, no offset, e.g. 2026-10-26T09:00");
+const isoTime = z.string().describe("Local date-time in the user's timezone, no offset, e.g. 2026-10-26T09:00");
 const rrule = z
   .string()
   .describe("iCalendar RRULE without DTSTART, e.g. FREQ=WEEKLY;BYDAY=MO or FREQ=DAILY;INTERVAL=2");
@@ -22,7 +29,9 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | { error: string }> {
   }
 }
 
-export function buildTools(userId: string, timeZone: string) {
+// `now` is fixed only in evals; in the app every call uses the live clock.
+export function buildTools(userId: string, timeZone: string, now?: Date) {
+  const clock = () => now ?? new Date();
   // Converts the model's local wall-clock times to instants; the server owns DST math.
   const at = <T extends string | null | undefined>(v: T) =>
     (typeof v === "string" ? parseLocal(v, timeZone) : v) as T extends string ? Date : T;
@@ -46,7 +55,9 @@ export function buildTools(userId: string, timeZone: string) {
         limit: z.number().int().positive().max(50).optional(),
       }),
       execute: ({ dueBefore, dueAfter, ...rest }) =>
-        safe(async () => (await findTasks(userId, { ...rest, dueBefore: at(dueBefore), dueAfter: at(dueAfter) })).map(t)),
+        safe(async () =>
+          (await findTasks(userId, { ...rest, dueBefore: at(dueBefore), dueAfter: at(dueAfter) })).map(t),
+        ),
     }),
 
     create_task: tool({
@@ -78,7 +89,8 @@ export function buildTools(userId: string, timeZone: string) {
         tags: z.array(z.string()).optional(),
         recurrenceRule: rrule.nullable().optional(),
       }),
-      execute: ({ id, dueAt, ...patch }) => safe(async () => t(await updateTask(userId, id, { ...patch, dueAt: at(dueAt) }))),
+      execute: ({ id, dueAt, ...patch }) =>
+        safe(async () => t(await updateTask(userId, id, { ...patch, dueAt: at(dueAt) }))),
     }),
 
     complete_task: tool({
@@ -104,7 +116,8 @@ export function buildTools(userId: string, timeZone: string) {
         to: isoTime.optional(),
         status: z.enum(["scheduled", "fired", "snoozed", "cancelled"]).optional(),
       }),
-      execute: ({ from, to, status }) => safe(async () => (await listReminders(userId, { status, from: at(from), to: at(to) })).map(r)),
+      execute: ({ from, to, status }) =>
+        safe(async () => (await listReminders(userId, { status, from: at(from), to: at(to) })).map(r)),
     }),
 
     create_reminder: tool({
@@ -117,7 +130,8 @@ export function buildTools(userId: string, timeZone: string) {
         recurrenceRule: rrule.optional(),
         taskId: z.string().optional(),
       }),
-      execute: ({ fireAt, ...rest }) => safe(async () => r(await createReminder(userId, { ...rest, fireAt: at(fireAt) }))),
+      execute: ({ fireAt, ...rest }) =>
+        safe(async () => r(await createReminder(userId, { ...rest, fireAt: at(fireAt) }))),
     }),
 
     update_reminder: tool({
@@ -128,7 +142,8 @@ export function buildTools(userId: string, timeZone: string) {
         fireAt: isoTime.optional(),
         recurrenceRule: rrule.nullable().optional(),
       }),
-      execute: ({ id, fireAt, ...patch }) => safe(async () => r(await updateReminder(userId, id, { ...patch, fireAt: at(fireAt) }))),
+      execute: ({ id, fireAt, ...patch }) =>
+        safe(async () => r(await updateReminder(userId, id, { ...patch, fireAt: at(fireAt) }))),
     }),
 
     cancel_reminder: tool({
@@ -140,7 +155,81 @@ export function buildTools(userId: string, timeZone: string) {
     snooze_reminder: tool({
       description: "Push a reminder later by some minutes from now.",
       inputSchema: z.object({ id: z.string(), minutes: z.number().int().positive().max(1440) }),
-      execute: ({ id, minutes }) => safe(async () => r(await snoozeReminder(userId, id, minutes))),
+      execute: ({ id, minutes }) => safe(async () => r(await snoozeReminder(userId, id, minutes, clock()))),
+    }),
+
+    propose_plan: tool({
+      description:
+        "Draft a schedule from the user's open tasks (scored by due date, priority, age, effort) fitted into " +
+        "working hours or a given window. Use for 'plan my day/week', 'what should I do next', 'I have 2 hours free'. " +
+        "Returns a draft; nothing changes until accept_plan. To apply edits, call again with pin/exclude.",
+      inputSchema: z.object({
+        day: z.string().optional().describe("Local date YYYY-MM-DD to plan; default today"),
+        days: z.number().int().min(1).max(7).optional().describe("1 for a day plan (default), 7 for a week plan"),
+        start: isoTime.optional().describe("Start of an explicit free window (replaces working hours)"),
+        end: isoTime.optional().describe("End of the explicit free window"),
+        availableMinutes: z.number().int().positive().optional().describe("Total minutes the user has"),
+        pinTaskIds: z.array(z.string()).optional().describe("Tasks to put first, in this order"),
+        excludeTaskIds: z.array(z.string()).optional().describe("Tasks to leave out"),
+      }),
+      execute: ({ day, days, start, end, availableMinutes, pinTaskIds, excludeTaskIds }) =>
+        safe(async () => {
+          const windowStart = at(start);
+          // "An hour free from 8": the duration is what the user said; an end the model rounded must not shrink it.
+          const byDuration =
+            windowStart && availableMinutes ? new Date(windowStart.getTime() + availableMinutes * 60_000) : undefined;
+          const explicitEnd = at(end);
+          const windowEnd =
+            explicitEnd && byDuration ? (explicitEnd > byDuration ? explicitEnd : byDuration) : (explicitEnd ?? byDuration);
+          const { plan, result } = await proposePlan(
+            userId,
+            {
+              day,
+              days,
+              windowStart,
+              windowEnd,
+              availableMinutes,
+              pinIds: pinTaskIds,
+              excludeIds: excludeTaskIds,
+            },
+            clock(),
+          );
+          return planView(plan, result.freeMinutes, timeZone);
+        }),
+    }),
+
+    get_plan: tool({
+      description: "Get the current plan for a day (the locked-in one, else the latest draft), as it is right now.",
+      inputSchema: z.object({ day: z.string().optional().describe("Local date YYYY-MM-DD; default today") }),
+      execute: ({ day }) =>
+        safe(async () => {
+          const plan = await getPlanForDay(userId, day ?? localDate(clock(), timeZone));
+          return plan ? planView(plan, null, timeZone) : { plan: null };
+        }),
+    }),
+
+    accept_plan: tool({
+      description:
+        "Lock in a drafted plan once the user agrees: sets each task's scheduled time. " +
+        "Set remindAtBlockStart only if the user asked to be reminded when each block starts.",
+      inputSchema: z.object({ planId: z.string(), remindAtBlockStart: z.boolean().optional() }),
+      execute: ({ planId, remindAtBlockStart }) =>
+        safe(async () => planView(await acceptPlan(userId, planId, { remindAtBlockStart }), null, timeZone)),
+    }),
+
+    set_briefing: tool({
+      description:
+        "Turn the daily morning briefing (today's plan) or evening review (what's done, what's left) on at a " +
+        "local time, move it, or turn it off with time: null.",
+      inputSchema: z.object({
+        kind: z.enum(["morning_briefing", "evening_review"]),
+        time: z.string().nullable().describe("Local 24h time HH:MM, e.g. 07:30; null turns it off"),
+      }),
+      execute: ({ kind, time }) =>
+        safe(async () => {
+          const reminder = await setBriefing(userId, kind, time, clock());
+          return reminder ? r(reminder) : { note: "It was already off" };
+        }),
     }),
 
     undo: tool({

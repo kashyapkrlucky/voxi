@@ -4,3 +4,11 @@ export class NotFoundError extends Error {
     this.name = "NotFoundError";
   }
 }
+
+// e.g. accepting a plan that was already accepted or superseded.
+export class PlanStateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PlanStateError";
+  }
+}

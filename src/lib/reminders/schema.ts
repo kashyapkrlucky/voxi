@@ -3,6 +3,7 @@ import { recurrenceRule } from "@/lib/tasks/schema";
 
 export const reminderStatuses = ["scheduled", "fired", "snoozed", "cancelled"] as const;
 export const reminderChannels = ["push", "tts"] as const;
+export const reminderKinds = ["reminder", "morning_briefing", "evening_review"] as const;
 
 export const createReminderInput = z.object({
   message: z.string().trim().min(1).max(500),
@@ -10,6 +11,7 @@ export const createReminderInput = z.object({
   recurrenceRule: recurrenceRule.nullable().optional(),
   taskId: z.string().nullable().optional(),
   channels: z.array(z.enum(reminderChannels)).min(1).optional(),
+  kind: z.enum(reminderKinds).optional(),
 });
 
 export const updateReminderInput = createReminderInput.partial();

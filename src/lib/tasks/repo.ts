@@ -65,7 +65,9 @@ export async function completeTask(userId: string, id: string): Promise<{ task: 
     });
 
     let next: Task | null = null;
-    const nextDue = before.recurrenceRule && before.dueAt ? nextOccurrence(before.recurrenceRule, before.dueAt) : null;
+    const { timezone } = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
+    const nextDue =
+      before.recurrenceRule && before.dueAt ? nextOccurrence(before.recurrenceRule, before.dueAt, timezone) : null;
     if (before.status !== "done" && nextDue) {
       next = await tx.task.create({
         data: {

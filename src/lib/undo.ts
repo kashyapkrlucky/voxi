@@ -33,8 +33,8 @@ export async function undoLast(userId: string, steps = 1): Promise<UndoneAction[
     for (const entry of entries) {
       const before = entry.before as Snapshot | null;
       const after = entry.after as Snapshot | { task: Snapshot; next: Snapshot | null } | null;
-      const { reminderId, ...action } = await revert(tx, entry.tool, before, after);
-      if (reminderId) reminderIds.add(reminderId);
+      const { reminderId, reminderIds: many = [], ...action } = await revert(tx, entry.tool, before, after);
+      for (const id of [reminderId, ...many]) if (id) reminderIds.add(id);
       undone.push(action);
       await tx.actionLog.update({ where: { id: entry.id }, data: { undone: true } });
     }
@@ -50,7 +50,7 @@ async function revert(
   tool: string,
   before: Snapshot | null,
   after: unknown,
-): Promise<UndoneAction & { reminderId?: string }> {
+): Promise<UndoneAction & { reminderId?: string; reminderIds?: string[] }> {
   switch (tool) {
     case "create_task": {
       const task = after as Snapshot;
@@ -76,6 +76,21 @@ async function revert(
     case "snooze_reminder": {
       await tx.reminder.update({ where: { id: before!.id }, data: pick(before!, reminderFields) });
       return { tool, summary: `Restored reminder "${before!.message}"`, reminderId: before!.id };
+    }
+    case "accept_plan": {
+      const prev = before as unknown as {
+        id: string;
+        tasks: { id: string; scheduledFor: string | null }[];
+        previousAcceptedIds: string[];
+      };
+      const { reminderIds } = after as { reminderIds: string[] };
+      for (const t of prev.tasks) await tx.task.update({ where: { id: t.id }, data: { scheduledFor: t.scheduledFor } });
+      await tx.plan.update({ where: { id: prev.id }, data: { status: "proposed", acceptedAt: null } });
+      if (prev.previousAcceptedIds.length) {
+        await tx.plan.updateMany({ where: { id: { in: prev.previousAcceptedIds } }, data: { status: "accepted" } });
+      }
+      await tx.reminder.updateMany({ where: { id: { in: reminderIds } }, data: { status: "cancelled" } });
+      return { tool, summary: "Un-accepted the plan", reminderIds };
     }
     default:
       throw new Error(`Cannot undo ${tool}`);

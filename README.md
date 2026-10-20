@@ -25,6 +25,17 @@ Replies are spoken only for turns started by voice. The bar under the chat picks
 
 The mic needs HTTPS or localhost.
 
+## Planning
+
+"Plan my day", "plan my week", "I have an hour free tonight", "what should I do next?". The planner is plain code:
+it scores open tasks (overdue/due soon, priority, age, a small nudge for quick wins) and fits them into working hours
+(09:00–18:00 by default, `users.work_start_min` / `work_end_min`) or the free window you name, using each task's
+estimate (30 min if unset). Voxi reads the draft back, applies edits ("skip the gym", "report first") by re-planning,
+and only locks it in when you agree. Locking in sets each task's `scheduledFor`; it's one undoable step.
+
+"Morning briefing at 7:30" / "evening review at 9pm" set daily briefing reminders. The morning one drafts today's
+plan and summarises it; the evening one says what you finished and what's still open.
+
 ## Reminders
 
 Each active reminder has one Trigger.dev delayed run, created/cancelled/rescheduled whenever the reminder changes
@@ -65,6 +76,9 @@ src/lib/tasks/            zod schemas + repository (create/update/delete/complet
 src/lib/reminders/        zod schemas + repository (create/list/update/cancel/snooze)
 src/app/api/              REST route handlers
 src/lib/undo.ts           undo via action_log snapshots
+src/lib/time.ts           timezone helpers (local wall clock ↔ UTC, DST-aware)
+src/lib/planning/         planner.ts (scoring + fitting), repo.ts (propose/accept), briefing.ts
+src/app/plan-card.tsx     today's plan card
 src/lib/agent/            OpenAI agent: tools, instructions, local-time helpers
 src/app/api/chat/         streaming chat endpoint (AI SDK)
 src/app/assistant.tsx     chat panel, mic button, voice settings
@@ -96,6 +110,9 @@ evals/                    agent evals
 | POST | `/api/reminders/:id/done` | notification "Done": completes the linked task |
 | POST / DELETE | `/api/push/subscribe` | browser `PushSubscription` JSON / `{ endpoint }` |
 | POST | `/api/push/test` | sends a test notification |
+| GET | `/api/plans?day=` | today's plan (accepted, else latest draft) |
+| POST | `/api/plans` | `{ day?, days? }` drafts a plan |
+| POST | `/api/plans/:id/accept` | `{ remindAtBlockStart? }` locks it in |
 
 ## Deploying (Vercel + Neon)
 
