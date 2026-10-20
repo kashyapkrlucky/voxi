@@ -229,7 +229,7 @@ export function Assistant({ onChange, onOpenTasks }: { onChange: () => void; onO
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Top bar */}
-      <header className="flex items-center gap-3 px-4 py-3 sm:px-6">
+      <header className="flex items-center gap-3 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6">
         <div className="flex items-center gap-2.5">
           <OrbMark className="size-7" />
           <span className="text-[17px] font-semibold tracking-tight">Voxi</span>
@@ -306,7 +306,7 @@ export function Assistant({ onChange, onOpenTasks }: { onChange: () => void; onO
       )}
 
       {/* Dock */}
-      <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 sm:px-6">
+      <div className="px-4 pb-[max(0.75rem,calc(env(safe-area-inset-bottom)_-_0.5rem))] pt-2 sm:px-6">
         <div className="mx-auto w-full max-w-2xl">
           {voice.error && (
             <p className="animate-rise mb-2 flex items-center gap-2 text-sm text-danger">
@@ -349,12 +349,11 @@ export function Assistant({ onChange, onOpenTasks }: { onChange: () => void; onO
             </form>
             {!empty && <VoiceOrb {...orbProps} />}
           </div>
-          <div className="mt-2 flex items-center justify-between px-2 text-[11px] text-faint">
+          <div className="mt-1.5 flex items-center justify-between px-2 text-[11px] text-faint">
             <VoiceMenu />
             <span className="hidden sm:inline">
               Hold <Kbd>Space</Kbd> to talk · <Kbd>Esc</Kbd> to cancel
             </span>
-            <span className="sm:hidden">Tap or hold the orb to talk</span>
           </div>
         </div>
       </div>

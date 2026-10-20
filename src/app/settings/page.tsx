@@ -13,7 +13,7 @@ export default async function SettingsPage() {
 
   return (
     <main className="scroll-quiet h-dvh overflow-y-auto">
-      <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:py-10">
+      <div className="mx-auto w-full max-w-2xl px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] sm:py-10">
         <header className="mb-8 flex items-center gap-3">
           <Link
             href="/"

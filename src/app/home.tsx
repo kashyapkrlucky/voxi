@@ -64,7 +64,7 @@ function TodayPanel({
     : "";
   return (
     <>
-      <div className="flex items-center gap-3 px-5 pb-3 pt-4">
+      <div className="flex items-center gap-3 px-5 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Today</h2>
           <p className="h-4 text-xs text-muted">{today}</p>
@@ -83,7 +83,7 @@ function TodayPanel({
         <PlanCard refreshKey={refreshKey} onChange={onChange} />
         <TaskBoard refreshKey={refreshKey} />
       </div>
-      <div className="border-t border-line px-5 py-3">
+      <div className="border-t border-line px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
         <NotificationsBar />
       </div>
     </>
