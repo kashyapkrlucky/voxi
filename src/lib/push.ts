@@ -14,16 +14,28 @@ export type PushPayload = {
 // the signature (Apple answers 403 BadJwtToken), so normalise them.
 const clean = (v: string | undefined) => v?.trim().replace(/^["']|["']$/g, "").trim() || undefined;
 
+// Apple's push service rejects anything but a real mailto: or https: contact (403 BadJwtToken); Google doesn't
+// check. Accept a bare email too, and fall back to OWNER_EMAIL rather than a made-up address.
+function vapidSubject(): string {
+  const isEmail = (v?: string) => !!v && /^[^@\s:]+@[^@\s]+\.[^@\s]+$/.test(v);
+  const subject = clean(process.env.VAPID_SUBJECT);
+  if (subject && /^(mailto:[^@\s]+@[^@\s]+\.[^@\s]+|https:\/\/\S+)$/.test(subject)) return subject;
+  if (isEmail(subject)) return `mailto:${subject}`;
+  const owner = clean(process.env.OWNER_EMAIL);
+  console.warn(
+    `VAPID_SUBJECT ${subject ? "is not a mailto:/https: contact" : "is not set"}; ` +
+      (isEmail(owner) ? "using OWNER_EMAIL" : "Apple devices will reject pushes until it is set"),
+  );
+  return isEmail(owner) ? `mailto:${owner}` : "mailto:owner@example.com";
+}
+
 let configured = false;
 function configure() {
   if (configured) return;
   const publicKey = clean(process.env.VAPID_PUBLIC_KEY);
   const privateKey = clean(process.env.VAPID_PRIVATE_KEY);
   if (!publicKey || !privateKey) throw new Error("VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY are not set");
-  const subject = clean(process.env.VAPID_SUBJECT);
-  const validSubject = subject && /^(mailto:[^@\s]+@[^@\s]+|https:\/\/\S+)$/.test(subject);
-  if (!validSubject) console.warn("VAPID_SUBJECT should be mailto:you@example.com or an https URL; using a default");
-  webpush.setVapidDetails(validSubject ? subject : "mailto:owner@voxi.local", publicKey, privateKey);
+  webpush.setVapidDetails(vapidSubject(), publicKey, privateKey);
   configured = true;
 }
 
