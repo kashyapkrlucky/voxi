@@ -1,4 +1,4 @@
-import { openai } from "@ai-sdk/openai";
+import { openai, type OpenAITranscriptionModelOptions } from "@ai-sdk/openai";
 import { generateSpeech, transcribe } from "ai";
 
 // Speech adapters (plan.md §4). Browser speech runs client-side; these are the OpenAI upgrades.
@@ -10,6 +10,14 @@ export async function transcribeAudio(audio: Uint8Array): Promise<string> {
   const result = await transcribe({
     model: openai.transcription(process.env.OPENAI_TRANSCRIBE_MODEL ?? "gpt-4o-transcribe"),
     audio,
+    providerOptions: {
+      openai: {
+        // Voxi supports English, Hindi and German; the hint helps with code-switching like Hinglish.
+        prompt:
+          "The speaker talks to a task assistant in English, Hindi (often mixed with English, Hinglish) or German. " +
+          "Write Hindi in Devanagari, German and English in Latin script.",
+      } satisfies OpenAITranscriptionModelOptions,
+    },
   });
   return result.text.trim();
 }
@@ -26,7 +34,10 @@ export async function synthesizeSpeech(text: string): Promise<{ audio: Uint8Arra
     text,
     voice,
     outputFormat: "mp3",
-    instructions: "Warm, friendly female personal assistant. Natural and upbeat, clear, a little brisk.",
+    instructions:
+      "Warm, friendly female personal assistant. Natural and upbeat, clear, a little brisk. " +
+      "Speak the text in its own language (English, Hindi or German) with native pronunciation; " +
+      "read romanized Hindi (Hinglish) with Hindi pronunciation.",
   });
   return { audio: result.audio.uint8Array, mediaType: result.audio.mediaType ?? "audio/mpeg" };
 }

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
-import { findOverdueReminderIds, fireReminder } from "@/lib/reminders/fire";
+import { findOverdueReminderIds, findUnscheduledReminderIds, fireReminder } from "@/lib/reminders/fire";
 import { acknowledgeReminder, cancelReminder, createReminder } from "@/lib/reminders/repo";
 import { createTask, getTask } from "@/lib/tasks/repo";
 import { createTestUser } from "@/lib/test-utils";
@@ -95,5 +95,21 @@ describe("acknowledgeReminder", () => {
 
     expect((await acknowledgeReminder(userId, r.id)).status).toBe("fired");
     expect((await getTask(userId, task.id)).status).toBe("done");
+  });
+});
+
+describe("findUnscheduledReminderIds", () => {
+  it("finds upcoming active reminders that have no delivery run", async () => {
+    const { userId: uid, cleanup: done } = await createTestUser();
+    const future = await createReminder(uid, { message: "later", fireAt: new Date("2100-01-01T00:00:00Z") });
+    const past = await createReminder(uid, { message: "past", fireAt: new Date("2000-01-01T00:00:00Z") });
+    const scheduled = await createReminder(uid, { message: "has run", fireAt: new Date("2100-01-01T00:00:00Z") });
+    await prisma.reminder.update({ where: { id: scheduled.id }, data: { triggerRunId: "run_x" } });
+
+    const ids = await findUnscheduledReminderIds(new Date(), 500);
+    expect(ids).toContain(future.id);
+    expect(ids).not.toContain(past.id); // overdue ones are delivered by the sweep instead
+    expect(ids).not.toContain(scheduled.id);
+    await done();
   });
 });

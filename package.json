@@ -13,8 +13,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "eval": "vitest run --config vitest.eval.config.mts",
-    "trigger:dev": "trigger.dev dev",
-    "trigger:deploy": "trigger.dev deploy"
+    "trigger:dev": "trigger dev",
+    "trigger:deploy": "trigger deploy"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.98",
@@ -48,6 +48,7 @@
     "eslint-config-next": "16.4.2",
     "prisma": "^7.10.1",
     "tailwindcss": "^4",
+    "trigger.dev": "^4.7.5",
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.5"

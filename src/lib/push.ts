@@ -10,13 +10,20 @@ export type PushPayload = {
   tag?: string;
 };
 
+// Dashboard values are often pasted with their .env quotes or stray whitespace; push services then reject
+// the signature (Apple answers 403 BadJwtToken), so normalise them.
+const clean = (v: string | undefined) => v?.trim().replace(/^["']|["']$/g, "").trim() || undefined;
+
 let configured = false;
 function configure() {
   if (configured) return;
-  const publicKey = process.env.VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  const publicKey = clean(process.env.VAPID_PUBLIC_KEY);
+  const privateKey = clean(process.env.VAPID_PRIVATE_KEY);
   if (!publicKey || !privateKey) throw new Error("VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY are not set");
-  webpush.setVapidDetails(process.env.VAPID_SUBJECT ?? "mailto:owner@voxi.local", publicKey, privateKey);
+  const subject = clean(process.env.VAPID_SUBJECT);
+  const validSubject = subject && /^(mailto:[^@\s]+@[^@\s]+|https:\/\/\S+)$/.test(subject);
+  if (!validSubject) console.warn("VAPID_SUBJECT should be mailto:you@example.com or an https URL; using a default");
+  webpush.setVapidDetails(validSubject ? subject : "mailto:owner@voxi.local", publicKey, privateKey);
   configured = true;
 }
 
@@ -43,7 +50,10 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
           await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
           removed++;
         } else {
-          console.error("push failed", status, (err as Error).message);
+          // 401/403 mean the push service rejected our VAPID signature: the device subscribed with a different
+          // public key than the one we sign with, or the subject is invalid. The body says which (e.g. BadJwtToken).
+          const body = String((err as { body?: unknown }).body ?? "").slice(0, 300);
+          console.error("push failed", { status, service: new URL(sub.endpoint).host, device: sub.deviceLabel, body });
         }
       }
     }),

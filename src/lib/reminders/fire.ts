@@ -142,3 +142,15 @@ export async function findOverdueReminderIds(now: Date = new Date(), graceMs = 6
   });
   return rows.map((r) => r.id);
 }
+
+// Upcoming active reminders with no delivery run, e.g. when scheduling failed at creation time
+// (Trigger.dev misconfigured or briefly down). The sweep schedules them so they still fire on time.
+export async function findUnscheduledReminderIds(now: Date = new Date(), limit = 100): Promise<string[]> {
+  const rows = await prisma.reminder.findMany({
+    where: { status: { in: ["scheduled", "snoozed"] }, triggerRunId: null, fireAt: { gt: now } },
+    orderBy: { fireAt: "asc" },
+    select: { id: true },
+    take: limit,
+  });
+  return rows.map((r) => r.id);
+}

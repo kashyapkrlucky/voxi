@@ -46,11 +46,53 @@ async function registration() {
   return navigator.serviceWorker.register("/sw.js");
 }
 
+// The VAPID public key baked into this build (stripped of pasted quotes, like the server does).
+function appKey(): Uint8Array<ArrayBuffer> {
+  return urlBase64ToUint8Array((process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "").trim().replace(/^["']|["']$/g, ""));
+}
+
+function sameKey(sub: PushSubscription, key: Uint8Array): boolean {
+  const k = sub.options.applicationServerKey;
+  if (!k) return false;
+  const a = new Uint8Array(k);
+  return a.length === key.length && a.every((v, i) => v === key[i]);
+}
+
+async function saveSubscription(sub: PushSubscription) {
+  const res = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...sub.toJSON(), deviceLabel: deviceLabel() }),
+  });
+  if (!res.ok) throw new Error("Couldn't save the subscription");
+}
+
+// A subscription made with an older VAPID key can't receive our pushes (the push service answers 403), so
+// replace it: forget the old endpoint on the server, then subscribe again with the current key.
+async function subscribeWithCurrentKey(reg: ServiceWorkerRegistration): Promise<PushSubscription> {
+  const key = appKey();
+  const existing = await reg.pushManager.getSubscription();
+  if (existing && sameKey(existing, key)) return existing;
+  if (existing) {
+    await fetch("/api/push/subscribe", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: existing.endpoint }),
+    }).catch(() => {});
+    await existing.unsubscribe();
+  }
+  return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+}
+
 async function currentState(): Promise<PushState> {
   if (!supported()) return "unsupported";
   if (Notification.permission === "denied") return "denied";
-  const sub = await (await registration()).pushManager.getSubscription();
-  return sub && Notification.permission === "granted" ? "on" : "off";
+  const reg = await registration();
+  const sub = await reg.pushManager.getSubscription();
+  if (!sub || Notification.permission !== "granted") return "off";
+  // Re-sync on every load: fixes key changes and makes sure the server still has this device.
+  await saveSubscription(await subscribeWithCurrentKey(reg));
+  return "on";
 }
 
 export function NotificationsBar() {
@@ -75,18 +117,7 @@ export function NotificationsBar() {
       }
       const reg = await registration();
       await navigator.serviceWorker.ready;
-      const sub =
-        (await reg.pushManager.getSubscription()) ??
-        (await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
-        }));
-      const res = await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...sub.toJSON(), deviceLabel: deviceLabel() }),
-      });
-      if (!res.ok) throw new Error("Couldn't save the subscription");
+      await saveSubscription(await subscribeWithCurrentKey(reg));
       setState("on");
     } catch (err) {
       setNote((err as Error).message);

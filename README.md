@@ -45,6 +45,11 @@ while Voxi speaks interrupts it. Speech is always OpenAI: the recording goes to 
 voice: `nova` by default, or `shimmer` / `coral` via `OPENAI_TTS_VOICE`. Typed turns get text only.
 On iOS the tap that starts listening also unlocks audio, so the spoken reply can play when it arrives.
 
+**Languages:** Voxi works in English, Hindi (Devanagari or Hinglish) and German. It answers in the language you
+used, keeps task and reminder text in that language, and understands time words like "morgen um 7" or
+"kal subah 9 baje". Anything else gets a one-line English reply saying which languages it supports, and nothing
+changes. The interface text is English.
+
 The mic needs HTTPS or localhost.
 
 ## Settings and your data

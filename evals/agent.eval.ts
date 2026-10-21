@@ -210,4 +210,45 @@ describe("agent evals", () => {
     const u = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
     expect([u.workStartMin, u.workEndMin, u.quietStartMin, u.quietEndMin]).toEqual([480, 990, 1320, 420]);
   });
+
+  // --- Languages: English, Hindi and German only ---
+
+  it("German: sets a reminder and answers in German", async () => {
+    const { say, reminders } = await setup();
+    const { text } = await say("Erinnere mich morgen um 19 Uhr daran, Mama anzurufen");
+    const [r] = await reminders();
+    expect(r.fireAt.toISOString()).toBe("2026-10-21T17:00:00.000Z");
+    expect(r.message).toMatch(/Mama/i);
+    expect(text).toMatch(/\b(ich|erinner|morgen|Uhr|Mama)\w*/i);
+    expect(text).not.toMatch(/\b(I'll|remind you|tomorrow)\b/i);
+  });
+
+  it("Hindi (Devanagari): sets a reminder and answers in Devanagari", async () => {
+    const { say, reminders } = await setup();
+    const { text } = await say("कल सुबह 9 बजे दवा लेने की याद दिलाना");
+    const [r] = await reminders();
+    expect(r.fireAt.toISOString()).toBe("2026-10-21T07:00:00.000Z");
+    expect(r.message).toMatch(/[\u0900-\u097F]/); // kept in Hindi
+    expect(text).toMatch(/[\u0900-\u097F]/);
+  });
+
+  it("Hinglish: creates a task with the right due time and replies in Latin script", async () => {
+    const { say, tasks } = await setup();
+    const { text } = await say("kal shaam 6 baje gym jaane ka task add karo");
+    const [task] = await tasks();
+    expect(task.title.toLowerCase()).toContain("gym");
+    expect(task.dueAt?.toISOString()).toBe("2026-10-21T16:00:00.000Z");
+    expect(text).not.toMatch(/[\u0900-\u097F]/);
+  });
+
+  it("other languages: changes nothing and says which languages are supported", async () => {
+    const { say, tasks, reminders } = await setup();
+    const { text, tools } = await say("Ajoute une tâche : acheter du pain demain");
+    expect(tools).toEqual([]);
+    expect(await tasks()).toHaveLength(0);
+    expect(await reminders()).toHaveLength(0);
+    expect(text).toMatch(/English/);
+    expect(text).toMatch(/Hindi/);
+    expect(text).toMatch(/German/);
+  });
 });
